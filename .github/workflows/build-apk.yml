@@ -5,25 +5,29 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout source
+        uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: 'npm'
 
-      - name: Install web dependencies & build web
+      - name: Npm install & build web
         run: |
           npm install
           npm run build
+          npx cap add android || true
+          npx cap sync android
 
-      - name: Setup JDK 17
+      - name: Setup JDK17
         uses: actions/setup-java@v5
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Grant execute permission
+      - name: Permission for gradlew
         working-directory: ./android
         run: chmod +x gradlew
 
@@ -31,7 +35,7 @@ jobs:
         working-directory: ./android
         run: ./gradlew assembleDebug
 
-      - name: Upload APK
+      - name: Upload generated APK
         uses: actions/upload-artifact@v4
         with:
           name: mistake-apk
