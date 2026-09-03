@@ -52,7 +52,6 @@ import type {
   TaxonomyType
 } from './types';
 
-// ========== 修改点1：添加 'review' 标签 ==========
 type TabKey = 'today' | 'import' | 'gallery' | 'calendar' | 'settings' | 'review';
 type SettingsPanel = 'learning' | 'taxonomy' | 'review' | 'backup' | 'storage';
 
@@ -216,7 +215,6 @@ function ReviewFullscreen({
   );
 }
 
-// ========== App 主函数 ==========
 function App() {
   const reducedMotion = useReducedMotion();
   const [activeTab, setActiveTab] = useState<TabKey>('today');
@@ -364,7 +362,7 @@ function App() {
         </motion.div>
       </header>
 
-      <main className="content">
+      <main className="content animate-fade">
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
@@ -493,7 +491,7 @@ function TabButton({ active, icon, label, onClick }: { active: boolean; icon: JS
   );
 }
 
-// ========== 修改后的 TodayView（只显示“开始沉浸式复习”按钮） ==========
+// ========== 修改后的 TodayView ==========
 function TodayView({
   settings,
   dueMistakes,
@@ -512,7 +510,7 @@ function TodayView({
   onStartReview: () => void;
 }) {
   return (
-    <section className="stack">
+    <section className="stack animate-card">
       <GaokaoCard examYear={settings.examYear} />
       <SectionHeading title="今日复习" meta={`${dueMistakes.length} 道`} />
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '40vh' }}>
@@ -536,7 +534,7 @@ function TodayView({
   );
 }
 
-// ========== 以下所有函数保持不变（ImportView, GalleryView, CalendarView, SettingsView 等） ==========
+// ========== 以下为未改动的组件 ==========
 function GaokaoCard({ examYear }: { examYear: number }) {
   const countdown = getGaokaoCountdown(examYear);
   return (
@@ -929,7 +927,7 @@ function GalleryView({
         <MiniSelect value={causeId} options={taxonomiesByType.cause} placeholder="全部错因" onChange={setCauseId} />
         <ChoiceInput value={difficulty} options={difficultyOptions} placeholder="全部难度" onChange={setDifficulty} />
       </div>
-      <motion.div className="gallery-grid">
+      <motion.div className="gallery-grid animate-card">
         <AnimatePresence initial={false}>
           {filtered.map((mistake) => (
             <MistakeCard
