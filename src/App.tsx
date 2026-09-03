@@ -115,17 +115,15 @@ const loadImportDraft = () => {
   }
 };
 
-// ========== 新增组件：全屏沉浸复习页 ==========
+// ========== 全屏沉浸式复习组件 ==========
 function ReviewFullscreen({
   dueMistakes,
   imagesByMistake,
-  taxonomyMap,
   onReviewed,
   onBack
 }: {
   dueMistakes: MistakeItem[];
   imagesByMistake: Map<string, ImageAsset[]>;
-  taxonomyMap: Map<string, string>;
   onReviewed: (mistake: MistakeItem, result: ReviewResult) => Promise<void>;
   onBack: () => void;
 }) {
@@ -133,17 +131,18 @@ function ReviewFullscreen({
   const total = dueMistakes.length;
   if (total === 0) {
     return (
-      <div style={{ padding: '40px', textAlign: 'center' }}>
-        <h2 style={{ fontSize: '2rem' }}>🎉 今天没有要复习的题</h2>
-        <button onClick={onBack} style={{ marginTop: '20px', padding: '12px 30px', fontSize: '1.2rem' }}>返回首页</button>
+      <div style={{ display: 'grid', placeItems: 'center', height: '100vh', background: '#eef2f7', color: '#6b7a8f', fontSize: '1.4rem', textAlign: 'center', padding: '20px' }}>
+        <div>
+          <div style={{ fontSize: '4rem', marginBottom: '20px' }}>🎉</div>
+          <h2>今天没有要复习的题</h2>
+          <button onClick={onBack} style={{ marginTop: '30px', padding: '14px 40px', borderRadius: '40px', border: '1px solid rgba(255,255,255,0.3)', background: 'rgba(58,90,140,0.15)', backdropFilter: 'blur(8px)', fontSize: '1.2rem', cursor: 'pointer' }}>返回首页</button>
+        </div>
       </div>
     );
   }
   const mistake = dueMistakes[currentIndex];
-  const subjectName = taxonomyMap.get(mistake.subjectId) || mistake.subjectName || '科目';
   const images = imagesByMistake.get(mistake.id) || [];
   const questionImages = images.filter(img => (img.role ?? 'question') === 'question');
-  const answerImages = images.filter(img => img.role === 'answer');
 
   const handleReview = async (result: ReviewResult) => {
     await onReviewed(mistake, result);
@@ -154,67 +153,125 @@ function ReviewFullscreen({
     }
   };
 
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
+  useEffect(() => {
+    const urls = questionImages.map(img => URL.createObjectURL(img.imageBlob));
+    setImageUrls(urls);
+    return () => urls.forEach(u => URL.revokeObjectURL(u));
+  }, [questionImages]);
+
   return (
-    <div style={{ width: '100%', height: '90vh', overflowY: 'auto', padding: '20px', backgroundColor: '#f8fafc' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h2 style={{ fontSize: '1.8rem' }}>📖 沉浸复习 ({currentIndex+1}/{total})</h2>
-        <button onClick={onBack} style={{ padding: '8px 20px', fontSize: '1rem', background: '#e2e8f0', border: 'none', borderRadius: '8px' }}>退出</button>
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      zIndex: 999,
+      background: 'linear-gradient(145deg, #eef2f7 0%, #f7fafc 100%)',
+      display: 'grid',
+      gridTemplateRows: 'auto 1fr auto',
+      padding: '20px 20px env(safe-area-inset-bottom) 20px',
+      gap: '16px',
+      overflow: 'hidden'
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 4px' }}>
+        <span style={{ fontSize: '1rem', color: '#6b7a8f', fontWeight: '500' }}>{currentIndex+1} / {total}</span>
+        <button onClick={onBack} style={{
+          background: 'rgba(255,255,255,0.4)',
+          backdropFilter: 'blur(12px)',
+          border: '1px solid rgba(255,255,255,0.3)',
+          borderRadius: '40px',
+          padding: '8px 20px',
+          fontSize: '1rem',
+          cursor: 'pointer',
+          color: '#1e2a3a'
+        }}>退出</button>
       </div>
-      <div style={{ background: 'white', borderRadius: '20px', padding: '30px', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>
-        <div style={{ fontSize: '2rem', lineHeight: '1.8', marginBottom: '20px' }}>
-          <div><strong>题目：</strong>{mistake.title || '（无标题）'}</div>
-          {mistake.note && <div><strong>备注：</strong>{mistake.note}</div>}
-          <div><strong>科目：</strong>{subjectName}</div>
-          <div><strong>难度：</strong>{difficultyLabel[mistake.difficulty]}</div>
-          <div><strong>下次复习：</strong>{formatShortDate(mistake.nextReviewAt)}</div>
-        </div>
-        {questionImages.length > 0 && (
-          <div style={{ margin: '20px 0' }}>
-            <strong>题目图片：</strong>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-              {questionImages.map((img, idx) => (
-                <img key={idx} src={URL.createObjectURL(img.imageBlob)} alt={`题图${idx+1}`} style={{ maxWidth: '80%', maxHeight: '300px', borderRadius: '12px', border: '1px solid #e2e8f0' }} />
-              ))}
-            </div>
+
+      <div style={{
+        display: 'grid',
+        placeItems: 'center',
+        height: '100%',
+        minHeight: 0,
+        overflow: 'hidden'
+      }}>
+        {imageUrls.length > 0 ? (
+          <img
+            src={imageUrls[0]}
+            alt="题目"
+            style={{
+              maxWidth: '100%',
+              maxHeight: '100%',
+              objectFit: 'contain',
+              borderRadius: '24px',
+              boxShadow: '0 20px 50px rgba(30,42,58,0.08)',
+              background: 'rgba(255,255,255,0.3)',
+              backdropFilter: 'blur(8px)',
+              padding: '8px'
+            }}
+          />
+        ) : (
+          <div style={{
+            fontSize: '2rem',
+            color: '#6b7a8f',
+            background: 'rgba(255,255,255,0.2)',
+            backdropFilter: 'blur(8px)',
+            padding: '40px',
+            borderRadius: '28px',
+            border: '1px solid rgba(255,255,255,0.3)'
+          }}>
+            📝 无图片
           </div>
         )}
-        <div style={{ margin: '20px 0', padding: '20px', background: '#f1f5f9', borderRadius: '12px' }}>
-          <strong>答案：</strong>
-          <p style={{ fontSize: '1.8rem', whiteSpace: 'pre-wrap' }}>{mistake.answer || '（未填写）'}</p>
-          {answerImages.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginTop: '10px' }}>
-              {answerImages.map((img, idx) => (
-                <img key={idx} src={URL.createObjectURL(img.imageBlob)} alt={`答案图${idx+1}`} style={{ maxWidth: '80%', maxHeight: '200px', borderRadius: '12px', border: '1px solid #e2e8f0' }} />
-              ))}
-            </div>
-          )}
-        </div>
-        {mistake.inspiration && <div><strong>启发：</strong><p style={{ fontSize: '1.6rem' }}>{mistake.inspiration}</p></div>}
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginTop: '30px' }}>
-          {(['forgot', 'struggled', 'remembered', 'mastered'] as ReviewResult[]).map((result) => (
+      </div>
+
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: '12px',
+        padding: '8px 4px'
+      }}>
+        {(['forgot', 'struggled', 'remembered', 'mastered'] as ReviewResult[]).map((result) => {
+          const label = reviewResultLabel[result];
+          const colors = {
+            forgot: 'rgba(196, 90, 106, 0.75)',
+            struggled: 'rgba(201, 146, 58, 0.75)',
+            remembered: 'rgba(58, 140, 122, 0.75)',
+            mastered: 'rgba(58, 90, 140, 0.75)'
+          };
+          return (
             <button
               key={result}
               onClick={() => handleReview(result)}
               style={{
-                padding: '14px 30px',
-                fontSize: '1.5rem',
+                padding: '20px 0',
                 borderRadius: '40px',
-                border: 'none',
-                backgroundColor: result === 'forgot' ? '#ef4444' : result === 'struggled' ? '#f59e0b' : result === 'remembered' ? '#3b82f6' : '#10b981',
+                border: '1px solid rgba(255,255,255,0.3)',
+                background: colors[result],
+                backdropFilter: 'blur(12px)',
                 color: 'white',
+                fontSize: '1.5rem',
+                fontWeight: '600',
                 cursor: 'pointer',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                transition: 'transform 0.15s ease',
+                WebkitTapHighlightColor: 'transparent',
+                outline: 'none',
+                boxShadow: '0 8px 20px rgba(0,0,0,0.04)'
               }}
+              onTouchStart={(e) => e.currentTarget.style.transform = 'scale(0.94)'}
+              onTouchEnd={(e) => e.currentTarget.style.transform = 'scale(1)'}
+              onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.94)'}
+              onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
+              onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
             >
-              {reviewResultLabel[result]}
+              {label}
             </button>
-          ))}
-        </div>
+          );
+        })}
       </div>
     </div>
   );
 }
 
+// ========== App 主函数 ==========
 function App() {
   const reducedMotion = useReducedMotion();
   const [activeTab, setActiveTab] = useState<TabKey>('today');
@@ -347,6 +404,18 @@ function App() {
     );
   }
 
+  // 沉浸式复习模式：直接全屏，不显示任何其他 UI
+  if (activeTab === 'review') {
+    return (
+      <ReviewFullscreen
+        dueMistakes={dueMistakes}
+        imagesByMistake={imagesByMistake}
+        onReviewed={handleReviewed}
+        onBack={() => setActiveTab('today')}
+      />
+    );
+  }
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -375,10 +444,6 @@ function App() {
               <TodayView
                 settings={settings}
                 dueMistakes={dueMistakes}
-                imagesByMistake={imagesByMistake}
-                taxonomyMap={taxonomyMap}
-                onReviewed={handleReviewed}
-                onArchive={handleArchive}
                 onStartReview={() => setActiveTab('review')}
               />
             )}
@@ -430,15 +495,6 @@ function App() {
                 onToast={setToast}
               />
             )}
-            {activeTab === 'review' && (
-              <ReviewFullscreen
-                dueMistakes={dueMistakes}
-                imagesByMistake={imagesByMistake}
-                taxonomyMap={taxonomyMap}
-                onReviewed={handleReviewed}
-                onBack={() => setActiveTab('today')}
-              />
-            )}
           </motion.div>
         </AnimatePresence>
       </main>
@@ -468,6 +524,7 @@ function App() {
   );
 }
 
+// ========== 所有辅助组件（保持不变） ==========
 function TabButton({ active, icon, label, onClick }: { active: boolean; icon: JSX.Element; label: string; onClick: () => void }) {
   const reducedMotion = useReducedMotion();
   return (
@@ -491,22 +548,14 @@ function TabButton({ active, icon, label, onClick }: { active: boolean; icon: JS
   );
 }
 
-// ========== 修改后的 TodayView ==========
+// ===== TodayView（只显示开始复习按钮） =====
 function TodayView({
   settings,
   dueMistakes,
-  imagesByMistake,
-  taxonomyMap,
-  onReviewed,
-  onArchive,
   onStartReview
 }: {
   settings: AppSettings;
   dueMistakes: MistakeItem[];
-  imagesByMistake: Map<string, ImageAsset[]>;
-  taxonomyMap: Map<string, string>;
-  onReviewed: (mistake: MistakeItem, result: ReviewResult) => Promise<void>;
-  onArchive: (mistake: MistakeItem) => Promise<void>;
   onStartReview: () => void;
 }) {
   return (
@@ -519,13 +568,22 @@ function TodayView({
           style={{
             fontSize: '2rem',
             padding: '20px 60px',
-            backgroundColor: '#4F46E5',
-            color: 'white',
-            border: 'none',
-            borderRadius: '16px',
+            background: 'rgba(58,90,140,0.12)',
+            backdropFilter: 'blur(12px)',
+            border: '1px solid rgba(255,255,255,0.3)',
+            borderRadius: '40px',
+            color: '#1e2a3a',
+            fontWeight: '600',
             cursor: 'pointer',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
+            boxShadow: '0 8px 20px rgba(30,42,58,0.04)',
+            transition: 'transform 0.15s ease',
+            WebkitTapHighlightColor: 'transparent'
           }}
+          onTouchStart={(e) => e.currentTarget.style.transform = 'scale(0.94)'}
+          onTouchEnd={(e) => e.currentTarget.style.transform = 'scale(1)'}
+          onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.94)'}
+          onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
+          onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
         >
           📖 开始沉浸式复习
         </button>
@@ -534,7 +592,6 @@ function TodayView({
   );
 }
 
-// ========== 以下为未改动的组件 ==========
 function GaokaoCard({ examYear }: { examYear: number }) {
   const countdown = getGaokaoCountdown(examYear);
   return (
