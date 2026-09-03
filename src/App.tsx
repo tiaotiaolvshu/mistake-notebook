@@ -189,7 +189,7 @@ function ReviewFullscreen({
       background: 'linear-gradient(145deg, #eef2f7 0%, #f7fafc 100%)',
       display: 'grid',
       gridTemplateRows: 'auto 1fr auto',
-      padding: '28px 20px env(safe-area-inset-bottom) 20px',
+      padding: '32px 20px env(safe-area-inset-bottom) 20px',
       gap: '12px',
       overflow: 'hidden'
     }}>
@@ -575,7 +575,7 @@ function TabButton({ active, icon, label, onClick }: { active: boolean; icon: JS
   );
 }
 
-// ===== TodayView（点击背景进入复习） =====
+// ===== TodayView（只有存在待复习题时才允许点击进入） =====
 function TodayView({
   settings,
   dueMistakes,
@@ -585,11 +585,19 @@ function TodayView({
   dueMistakes: MistakeItem[];
   onStartReview: () => void;
 }) {
+  const handleClick = () => {
+    if (dueMistakes.length > 0) {
+      onStartReview();
+    } else {
+      // 可选：显示一个提示，但我们不做，直接忽略点击
+    }
+  };
+
   return (
     <section
       className="stack animate-card"
-      onClick={onStartReview}
-      style={{ cursor: 'default' }}
+      onClick={handleClick}
+      style={{ cursor: dueMistakes.length > 0 ? 'pointer' : 'default' }}
     >
       <GaokaoCard examYear={settings.examYear} />
       <SectionHeading title="今日复习" meta={`${dueMistakes.length} 道`} />
@@ -604,12 +612,20 @@ function TodayView({
           userSelect: 'none'
         }}
       >
-        <p style={{ color: '#6b7a8f', fontSize: '1rem', fontWeight: '400', letterSpacing: '0.03em', margin: 0 }}>
-          点击任意空白开始复习
-        </p>
-        <p style={{ color: '#6b7a8f', fontSize: '0.8rem', opacity: 0.6, margin: 0 }}>
-          {dueMistakes.length} 道题等待复习
-        </p>
+        {dueMistakes.length > 0 ? (
+          <>
+            <p style={{ color: '#6b7a8f', fontSize: '1rem', fontWeight: '400', letterSpacing: '0.03em', margin: 0 }}>
+              点击任意空白开始复习
+            </p>
+            <p style={{ color: '#6b7a8f', fontSize: '0.8rem', opacity: 0.6, margin: 0 }}>
+              {dueMistakes.length} 道题等待复习
+            </p>
+          </>
+        ) : (
+          <p style={{ color: '#6b7a8f', fontSize: '1rem', fontWeight: '400', margin: 0 }}>
+            ✅ 今天没有复习任务
+          </p>
+        )}
       </div>
     </section>
   );
@@ -1493,7 +1509,7 @@ interface ChoiceOption {
   name: string;
 }
 
-// ===== 修复 ChoiceInput（使用原生 button，确保可点） =====
+// ===== 修复 ChoiceInput：使用原生 button，确保可点击 =====
 function ChoiceInput({
   label,
   value,
