@@ -52,7 +52,8 @@ import type {
   TaxonomyType
 } from './types';
 
-type TabKey = 'today' | 'import' | 'gallery' | 'calendar' | 'settings';
+// ========== 修改点1：添加 'review' 标签 ==========
+type TabKey = 'today' | 'import' | 'gallery' | 'calendar' | 'settings' | 'review';
 type SettingsPanel = 'learning' | 'taxonomy' | 'review' | 'backup' | 'storage';
 
 interface PendingImage {
@@ -115,6 +116,107 @@ const loadImportDraft = () => {
   }
 };
 
+// ========== 新增组件：全屏沉浸复习页 ==========
+function ReviewFullscreen({
+  dueMistakes,
+  imagesByMistake,
+  taxonomyMap,
+  onReviewed,
+  onBack
+}: {
+  dueMistakes: MistakeItem[];
+  imagesByMistake: Map<string, ImageAsset[]>;
+  taxonomyMap: Map<string, string>;
+  onReviewed: (mistake: MistakeItem, result: ReviewResult) => Promise<void>;
+  onBack: () => void;
+}) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const total = dueMistakes.length;
+  if (total === 0) {
+    return (
+      <div style={{ padding: '40px', textAlign: 'center' }}>
+        <h2 style={{ fontSize: '2rem' }}>🎉 今天没有要复习的题</h2>
+        <button onClick={onBack} style={{ marginTop: '20px', padding: '12px 30px', fontSize: '1.2rem' }}>返回首页</button>
+      </div>
+    );
+  }
+  const mistake = dueMistakes[currentIndex];
+  const subjectName = taxonomyMap.get(mistake.subjectId) || mistake.subjectName || '科目';
+  const images = imagesByMistake.get(mistake.id) || [];
+  const questionImages = images.filter(img => (img.role ?? 'question') === 'question');
+  const answerImages = images.filter(img => img.role === 'answer');
+
+  const handleReview = async (result: ReviewResult) => {
+    await onReviewed(mistake, result);
+    if (currentIndex + 1 < total) {
+      setCurrentIndex(currentIndex + 1);
+    } else {
+      onBack();
+    }
+  };
+
+  return (
+    <div style={{ width: '100%', height: '90vh', overflowY: 'auto', padding: '20px', backgroundColor: '#f8fafc' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <h2 style={{ fontSize: '1.8rem' }}>📖 沉浸复习 ({currentIndex+1}/{total})</h2>
+        <button onClick={onBack} style={{ padding: '8px 20px', fontSize: '1rem', background: '#e2e8f0', border: 'none', borderRadius: '8px' }}>退出</button>
+      </div>
+      <div style={{ background: 'white', borderRadius: '20px', padding: '30px', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>
+        <div style={{ fontSize: '2rem', lineHeight: '1.8', marginBottom: '20px' }}>
+          <div><strong>题目：</strong>{mistake.title || '（无标题）'}</div>
+          {mistake.note && <div><strong>备注：</strong>{mistake.note}</div>}
+          <div><strong>科目：</strong>{subjectName}</div>
+          <div><strong>难度：</strong>{difficultyLabel[mistake.difficulty]}</div>
+          <div><strong>下次复习：</strong>{formatShortDate(mistake.nextReviewAt)}</div>
+        </div>
+        {questionImages.length > 0 && (
+          <div style={{ margin: '20px 0' }}>
+            <strong>题目图片：</strong>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+              {questionImages.map((img, idx) => (
+                <img key={idx} src={URL.createObjectURL(img.imageBlob)} alt={`题图${idx+1}`} style={{ maxWidth: '80%', maxHeight: '300px', borderRadius: '12px', border: '1px solid #e2e8f0' }} />
+              ))}
+            </div>
+          </div>
+        )}
+        <div style={{ margin: '20px 0', padding: '20px', background: '#f1f5f9', borderRadius: '12px' }}>
+          <strong>答案：</strong>
+          <p style={{ fontSize: '1.8rem', whiteSpace: 'pre-wrap' }}>{mistake.answer || '（未填写）'}</p>
+          {answerImages.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginTop: '10px' }}>
+              {answerImages.map((img, idx) => (
+                <img key={idx} src={URL.createObjectURL(img.imageBlob)} alt={`答案图${idx+1}`} style={{ maxWidth: '80%', maxHeight: '200px', borderRadius: '12px', border: '1px solid #e2e8f0' }} />
+              ))}
+            </div>
+          )}
+        </div>
+        {mistake.inspiration && <div><strong>启发：</strong><p style={{ fontSize: '1.6rem' }}>{mistake.inspiration}</p></div>}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginTop: '30px' }}>
+          {(['forgot', 'struggled', 'remembered', 'mastered'] as ReviewResult[]).map((result) => (
+            <button
+              key={result}
+              onClick={() => handleReview(result)}
+              style={{
+                padding: '14px 30px',
+                fontSize: '1.5rem',
+                borderRadius: '40px',
+                border: 'none',
+                backgroundColor: result === 'forgot' ? '#ef4444' : result === 'struggled' ? '#f59e0b' : result === 'remembered' ? '#3b82f6' : '#10b981',
+                color: 'white',
+                cursor: 'pointer',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+              }}
+            >
+              {reviewResultLabel[result]}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ========== App 主函数 ==========
 function App() {
   const reducedMotion = useReducedMotion();
   const [activeTab, setActiveTab] = useState<TabKey>('today');
@@ -279,6 +381,7 @@ function App() {
                 taxonomyMap={taxonomyMap}
                 onReviewed={handleReviewed}
                 onArchive={handleArchive}
+                onStartReview={() => setActiveTab('review')}
               />
             )}
             {activeTab === 'import' && (
@@ -327,6 +430,15 @@ function App() {
                 }}
                 onImport={handleImportBackup}
                 onToast={setToast}
+              />
+            )}
+            {activeTab === 'review' && (
+              <ReviewFullscreen
+                dueMistakes={dueMistakes}
+                imagesByMistake={imagesByMistake}
+                taxonomyMap={taxonomyMap}
+                onReviewed={handleReviewed}
+                onBack={() => setActiveTab('today')}
               />
             )}
           </motion.div>
@@ -381,13 +493,15 @@ function TabButton({ active, icon, label, onClick }: { active: boolean; icon: JS
   );
 }
 
+// ========== 修改后的 TodayView（只显示“开始沉浸式复习”按钮） ==========
 function TodayView({
   settings,
   dueMistakes,
   imagesByMistake,
   taxonomyMap,
   onReviewed,
-  onArchive
+  onArchive,
+  onStartReview
 }: {
   settings: AppSettings;
   dueMistakes: MistakeItem[];
@@ -395,36 +509,34 @@ function TodayView({
   taxonomyMap: Map<string, string>;
   onReviewed: (mistake: MistakeItem, result: ReviewResult) => Promise<void>;
   onArchive: (mistake: MistakeItem) => Promise<void>;
+  onStartReview: () => void;
 }) {
   return (
     <section className="stack">
       <GaokaoCard examYear={settings.examYear} />
       <SectionHeading title="今日复习" meta={`${dueMistakes.length} 道`} />
-      <AnimatePresence initial={false}>
-        {dueMistakes.map((mistake) => (
-          <MistakeCard
-            key={mistake.id}
-            mistake={mistake}
-            images={imagesByMistake.get(mistake.id) ?? []}
-            taxonomyMap={taxonomyMap}
-            onArchive={onArchive}
-            footer={
-              <div className="review-actions">
-                {(['forgot', 'struggled', 'remembered', 'mastered'] as ReviewResult[]).map((result) => (
-                  <MotionTapButton key={result} type="button" onClick={() => onReviewed(mistake, result)}>
-                    {reviewResultLabel[result]}
-                  </MotionTapButton>
-                ))}
-              </div>
-            }
-          />
-        ))}
-      </AnimatePresence>
-      {dueMistakes.length === 0 && <EmptyState icon={<Check />} title="今天清空" text="没有到期错题。" />}
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '40vh' }}>
+        <button
+          onClick={onStartReview}
+          style={{
+            fontSize: '2rem',
+            padding: '20px 60px',
+            backgroundColor: '#4F46E5',
+            color: 'white',
+            border: 'none',
+            borderRadius: '16px',
+            cursor: 'pointer',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
+          }}
+        >
+          📖 开始沉浸式复习
+        </button>
+      </div>
     </section>
   );
 }
 
+// ========== 以下所有函数保持不变（ImportView, GalleryView, CalendarView, SettingsView 等） ==========
 function GaokaoCard({ examYear }: { examYear: number }) {
   const countdown = getGaokaoCountdown(examYear);
   return (
@@ -1101,7 +1213,7 @@ function ReviewPreview({ intervals }: { intervals: number[] }) {
     <div className="review-preview">
       <div className="interval-chips">
         {intervals.map((day, index) => (
-          <motion.span key={`${day}-${index}`} transition={springSoft}>第{index + 1}轮 {day}天</motion.span>
+          <motion.span key={`${day}-${index}`} transition={springSoft}>第{index+1}轮 {day}天</motion.span>
         ))}
       </div>
       <div className="preview-results">
