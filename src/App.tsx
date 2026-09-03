@@ -52,7 +52,7 @@ import type {
   TaxonomyType
 } from './types';
 
-type TabKey = 'today' | 'import' | 'gallery' | 'calendar' | 'settings';
+type TabKey = 'today' | 'import' | 'gallery' | 'calendar' | 'settings' | 'review';
 type SettingsPanel = 'learning' | 'taxonomy' | 'review' | 'backup' | 'storage';
 
 interface PendingImage {
@@ -115,6 +115,190 @@ const loadImportDraft = () => {
   }
 };
 
+// ========== 沉浸式全屏复习组件 ==========
+function ReviewFullscreen({
+  dueMistakes,
+  imagesByMistake,
+  onReviewed,
+  onBack
+}: {
+  dueMistakes: MistakeItem[];
+  imagesByMistake: Map<string, ImageAsset[]>;
+  onReviewed: (mistake: MistakeItem, result: ReviewResult) => Promise<void>;
+  onBack: () => void;
+}) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const total = dueMistakes.length;
+
+  const mistake = dueMistakes[currentIndex];
+  const images = imagesByMistake.get(mistake.id) || [];
+  const questionImages = images.filter(img => (img.role ?? 'question') === 'question');
+  const imageBlob = questionImages.length > 0 ? questionImages[0].imageBlob : null;
+
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const prevUrlRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (imageBlob) {
+      const newUrl = URL.createObjectURL(imageBlob);
+      if (prevUrlRef.current) {
+        URL.revokeObjectURL(prevUrlRef.current);
+      }
+      setImageUrl(newUrl);
+      prevUrlRef.current = newUrl;
+    } else {
+      setImageUrl(null);
+      if (prevUrlRef.current) {
+        URL.revokeObjectURL(prevUrlRef.current);
+        prevUrlRef.current = null;
+      }
+    }
+    return () => {
+      if (prevUrlRef.current) {
+        URL.revokeObjectURL(prevUrlRef.current);
+      }
+    };
+  }, [imageBlob]);
+
+  const handleReview = async (result: ReviewResult) => {
+    await onReviewed(mistake, result);
+    if (currentIndex + 1 < total) {
+      setCurrentIndex(currentIndex + 1);
+    } else {
+      onBack();
+    }
+  };
+
+  if (total === 0) {
+    return (
+      <div style={{ display: 'grid', placeItems: 'center', height: '100vh', background: '#eef2f7', color: '#6b7a8f', fontSize: '1.4rem', textAlign: 'center', padding: '20px' }}>
+        <div>
+          <div style={{ fontSize: '4rem', marginBottom: '20px' }}>🎉</div>
+          <h2>今天没有要复习的题</h2>
+          <button onClick={onBack} style={{ marginTop: '30px', padding: '14px 40px', borderRadius: '40px', border: '1px solid rgba(255,255,255,0.3)', background: 'rgba(58,90,140,0.15)', backdropFilter: 'blur(8px)', fontSize: '1.2rem', cursor: 'pointer' }}>返回首页</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      zIndex: 999,
+      background: 'linear-gradient(145deg, #eef2f7 0%, #f7fafc 100%)',
+      display: 'grid',
+      gridTemplateRows: 'auto 1fr auto',
+      padding: '28px 20px env(safe-area-inset-bottom) 20px',
+      gap: '12px',
+      overflow: 'hidden'
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 4px' }}>
+        <span style={{ fontSize: '0.9rem', color: '#6b7a8f', fontWeight: '500' }}>{currentIndex+1} / {total}</span>
+        <button onClick={onBack} style={{
+          background: 'rgba(255,255,255,0.4)',
+          backdropFilter: 'blur(12px)',
+          border: '1px solid rgba(255,255,255,0.3)',
+          borderRadius: '40px',
+          padding: '6px 16px',
+          fontSize: '0.9rem',
+          cursor: 'pointer',
+          color: '#1e2a3a'
+        }}>退出</button>
+      </div>
+
+      <div style={{
+        display: 'grid',
+        placeItems: 'center',
+        height: '100%',
+        minHeight: 0,
+        overflow: 'hidden'
+      }}>
+        <AnimatePresence mode="wait">
+          {imageUrl ? (
+            <motion.img
+              key={imageUrl}
+              src={imageUrl}
+              alt="题目"
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              transition={{ duration: 0.3, ease: 'easeInOut' }}
+              style={{
+                maxWidth: '90%',
+                maxHeight: '100%',
+                objectFit: 'contain',
+                borderRadius: '20px',
+                boxShadow: '0 12px 30px rgba(30,42,58,0.06)',
+                background: 'rgba(255,255,255,0.2)',
+                backdropFilter: 'blur(6px)',
+                padding: '6px'
+              }}
+            />
+          ) : (
+            <div style={{
+              fontSize: '1.5rem',
+              color: '#6b7a8f',
+              background: 'rgba(255,255,255,0.2)',
+              backdropFilter: 'blur(8px)',
+              padding: '30px',
+              borderRadius: '24px',
+              border: '1px solid rgba(255,255,255,0.3)'
+            }}>
+              📝 无图片
+            </div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        gap: '10px',
+        padding: '4px 0',
+        flexWrap: 'wrap'
+      }}>
+        {(['forgot', 'struggled', 'remembered', 'mastered'] as ReviewResult[]).map((result) => {
+          const label = reviewResultLabel[result];
+          const colors = {
+            forgot: 'rgba(196, 90, 106, 0.7)',
+            struggled: 'rgba(201, 146, 58, 0.7)',
+            remembered: 'rgba(58, 140, 122, 0.7)',
+            mastered: 'rgba(58, 90, 140, 0.7)'
+          };
+          return (
+            <motion.button
+              key={result}
+              onClick={() => handleReview(result)}
+              whileTap={{ scale: 0.94 }}
+              style={{
+                flex: '0 1 22%',
+                minWidth: '80px',
+                padding: '12px 0',
+                borderRadius: '30px',
+                border: '1px solid rgba(255,255,255,0.3)',
+                background: colors[result],
+                backdropFilter: 'blur(12px)',
+                color: 'white',
+                fontSize: '1.1rem',
+                fontWeight: '600',
+                cursor: 'pointer',
+                WebkitTapHighlightColor: 'transparent',
+                outline: 'none',
+                boxShadow: '0 6px 16px rgba(0,0,0,0.04)',
+                textAlign: 'center'
+              }}
+            >
+              {label}
+            </motion.button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ========== App 主函数 ==========
 function App() {
   const reducedMotion = useReducedMotion();
   const [activeTab, setActiveTab] = useState<TabKey>('today');
@@ -247,6 +431,18 @@ function App() {
     );
   }
 
+  // 沉浸式复习模式：直接全屏
+  if (activeTab === 'review') {
+    return (
+      <ReviewFullscreen
+        dueMistakes={dueMistakes}
+        imagesByMistake={imagesByMistake}
+        onReviewed={handleReviewed}
+        onBack={() => setActiveTab('today')}
+      />
+    );
+  }
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -262,7 +458,7 @@ function App() {
         </motion.div>
       </header>
 
-      <main className="content">
+      <main className="content animate-fade">
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
@@ -275,10 +471,7 @@ function App() {
               <TodayView
                 settings={settings}
                 dueMistakes={dueMistakes}
-                imagesByMistake={imagesByMistake}
-                taxonomyMap={taxonomyMap}
-                onReviewed={handleReviewed}
-                onArchive={handleArchive}
+                onStartReview={() => setActiveTab('review')}
               />
             )}
             {activeTab === 'import' && (
@@ -358,6 +551,7 @@ function App() {
   );
 }
 
+// ===== TabButton =====
 function TabButton({ active, icon, label, onClick }: { active: boolean; icon: JSX.Element; label: string; onClick: () => void }) {
   const reducedMotion = useReducedMotion();
   return (
@@ -381,50 +575,47 @@ function TabButton({ active, icon, label, onClick }: { active: boolean; icon: JS
   );
 }
 
+// ===== TodayView（点击背景进入复习） =====
 function TodayView({
   settings,
   dueMistakes,
-  imagesByMistake,
-  taxonomyMap,
-  onReviewed,
-  onArchive
+  onStartReview
 }: {
   settings: AppSettings;
   dueMistakes: MistakeItem[];
-  imagesByMistake: Map<string, ImageAsset[]>;
-  taxonomyMap: Map<string, string>;
-  onReviewed: (mistake: MistakeItem, result: ReviewResult) => Promise<void>;
-  onArchive: (mistake: MistakeItem) => Promise<void>;
+  onStartReview: () => void;
 }) {
   return (
-    <section className="stack">
+    <section
+      className="stack animate-card"
+      onClick={onStartReview}
+      style={{ cursor: 'default' }}
+    >
       <GaokaoCard examYear={settings.examYear} />
       <SectionHeading title="今日复习" meta={`${dueMistakes.length} 道`} />
-      <AnimatePresence initial={false}>
-        {dueMistakes.map((mistake) => (
-          <MistakeCard
-            key={mistake.id}
-            mistake={mistake}
-            images={imagesByMistake.get(mistake.id) ?? []}
-            taxonomyMap={taxonomyMap}
-            onArchive={onArchive}
-            footer={
-              <div className="review-actions">
-                {(['forgot', 'struggled', 'remembered', 'mastered'] as ReviewResult[]).map((result) => (
-                  <MotionTapButton key={result} type="button" onClick={() => onReviewed(mistake, result)}>
-                    {reviewResultLabel[result]}
-                  </MotionTapButton>
-                ))}
-              </div>
-            }
-          />
-        ))}
-      </AnimatePresence>
-      {dueMistakes.length === 0 && <EmptyState icon={<Check />} title="今天清空" text="没有到期错题。" />}
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '40vh',
+          gap: '6px',
+          userSelect: 'none'
+        }}
+      >
+        <p style={{ color: '#6b7a8f', fontSize: '1rem', fontWeight: '400', letterSpacing: '0.03em', margin: 0 }}>
+          点击任意空白开始复习
+        </p>
+        <p style={{ color: '#6b7a8f', fontSize: '0.8rem', opacity: 0.6, margin: 0 }}>
+          {dueMistakes.length} 道题等待复习
+        </p>
+      </div>
     </section>
   );
 }
 
+// ===== GaokaoCard =====
 function GaokaoCard({ examYear }: { examYear: number }) {
   const countdown = getGaokaoCountdown(examYear);
   return (
@@ -461,6 +652,7 @@ function CountdownUnit({ value, label }: { value: number; label: string }) {
   );
 }
 
+// ===== ImportView（完整） =====
 function ImportView({
   settings,
   taxonomiesByType,
@@ -773,6 +965,7 @@ function SourceInput({
   );
 }
 
+// ===== GalleryView =====
 function GalleryView({
   mistakes,
   imagesByMistake,
@@ -817,7 +1010,7 @@ function GalleryView({
         <MiniSelect value={causeId} options={taxonomiesByType.cause} placeholder="全部错因" onChange={setCauseId} />
         <ChoiceInput value={difficulty} options={difficultyOptions} placeholder="全部难度" onChange={setDifficulty} />
       </div>
-      <motion.div className="gallery-grid">
+      <motion.div className="gallery-grid animate-card">
         <AnimatePresence initial={false}>
           {filtered.map((mistake) => (
             <MistakeCard
@@ -836,6 +1029,7 @@ function GalleryView({
   );
 }
 
+// ===== CalendarView =====
 function CalendarView({
   mistakes,
   imagesByMistake,
@@ -936,6 +1130,7 @@ function CalendarView({
   );
 }
 
+// ===== SettingsView =====
 function SettingsView({
   settings,
   taxonomiesByType,
@@ -1138,6 +1333,7 @@ function TaxonomyEditor({ item, onRefresh }: { item: TaxonomyOption; onRefresh: 
   );
 }
 
+// ===== MistakeCard =====
 function MistakeCard({
   mistake,
   images,
@@ -1297,6 +1493,7 @@ interface ChoiceOption {
   name: string;
 }
 
+// ===== 修复 ChoiceInput（使用原生 button，确保可点） =====
 function ChoiceInput({
   label,
   value,
@@ -1379,6 +1576,7 @@ function MiniSelect({ value, options, placeholder, onChange }: { value: string; 
   return <ChoiceInput value={value} options={[{ id: '', name: placeholder }, ...options]} placeholder={placeholder} onChange={onChange} />;
 }
 
+// ===== ImageLightbox =====
 function ImageLightbox({ image, onClose }: { image: { src: string; title: string } | null; onClose: () => void }) {
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
