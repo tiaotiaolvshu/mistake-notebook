@@ -130,6 +130,11 @@ function ReviewFullscreen({
   const [currentIndex, setCurrentIndex] = useState(0);
   const total = dueMistakes.length;
 
+  if (total === 0) {
+    onBack();
+    return null;
+  }
+
   const mistake = dueMistakes[currentIndex];
   const images = imagesByMistake.get(mistake.id) || [];
   const questionImages = images.filter(img => (img.role ?? 'question') === 'question');
@@ -168,18 +173,6 @@ function ReviewFullscreen({
       onBack();
     }
   };
-
-  if (total === 0) {
-    return (
-      <div style={{ display: 'grid', placeItems: 'center', height: '100vh', background: '#eef2f7', color: '#6b7a8f', fontSize: '1.4rem', textAlign: 'center', padding: '20px' }}>
-        <div>
-          <div style={{ fontSize: '4rem', marginBottom: '20px' }}>🎉</div>
-          <h2>今天没有要复习的题</h2>
-          <button onClick={onBack} style={{ marginTop: '30px', padding: '14px 40px', borderRadius: '40px', border: '1px solid rgba(255,255,255,0.3)', background: 'rgba(58,90,140,0.15)', backdropFilter: 'blur(8px)', fontSize: '1.2rem', cursor: 'pointer' }}>返回首页</button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div style={{
@@ -431,7 +424,6 @@ function App() {
     );
   }
 
-  // 沉浸式复习模式：直接全屏
   if (activeTab === 'review') {
     return (
       <ReviewFullscreen
@@ -575,7 +567,7 @@ function TabButton({ active, icon, label, onClick }: { active: boolean; icon: JS
   );
 }
 
-// ===== TodayView（只有存在待复习题时才允许点击进入） =====
+// ===== TodayView =====
 function TodayView({
   settings,
   dueMistakes,
@@ -585,20 +577,9 @@ function TodayView({
   dueMistakes: MistakeItem[];
   onStartReview: () => void;
 }) {
-  const handleClick = () => {
-    if (dueMistakes.length > 0) {
-      onStartReview();
-    } else {
-      // 可选：显示一个提示，但我们不做，直接忽略点击
-    }
-  };
-
+  const hasDue = dueMistakes.length > 0;
   return (
-    <section
-      className="stack animate-card"
-      onClick={handleClick}
-      style={{ cursor: dueMistakes.length > 0 ? 'pointer' : 'default' }}
-    >
+    <section className="stack animate-card">
       <GaokaoCard examYear={settings.examYear} />
       <SectionHeading title="今日复习" meta={`${dueMistakes.length} 道`} />
       <div
@@ -609,21 +590,23 @@ function TodayView({
           alignItems: 'center',
           height: '40vh',
           gap: '6px',
-          userSelect: 'none'
+          userSelect: 'none',
+          cursor: hasDue ? 'pointer' : 'default'
         }}
+        onClick={hasDue ? onStartReview : undefined}
       >
-        {dueMistakes.length > 0 ? (
+        {hasDue ? (
           <>
             <p style={{ color: '#6b7a8f', fontSize: '1rem', fontWeight: '400', letterSpacing: '0.03em', margin: 0 }}>
-              点击任意空白开始复习
+              👆 点击空白区域开始沉浸复习
             </p>
             <p style={{ color: '#6b7a8f', fontSize: '0.8rem', opacity: 0.6, margin: 0 }}>
-              {dueMistakes.length} 道题等待复习
+              共 {dueMistakes.length} 道题待复习
             </p>
           </>
         ) : (
           <p style={{ color: '#6b7a8f', fontSize: '1rem', fontWeight: '400', margin: 0 }}>
-            ✅ 今天没有复习任务
+            ✅ 今日无待复习任务，放松一下吧
           </p>
         )}
       </div>
@@ -668,7 +651,7 @@ function CountdownUnit({ value, label }: { value: number; label: string }) {
   );
 }
 
-// ===== ImportView（完整） =====
+// ===== ImportView =====
 function ImportView({
   settings,
   taxonomiesByType,
@@ -1509,7 +1492,7 @@ interface ChoiceOption {
   name: string;
 }
 
-// ===== 修复 ChoiceInput：使用原生 button，确保可点击 =====
+// ===== ChoiceInput 修复：使用原生 button 确保可靠点击，但保持高级样式 =====
 function ChoiceInput({
   label,
   value,
@@ -1525,6 +1508,14 @@ function ChoiceInput({
 }) {
   const [open, setOpen] = useState(false);
   const selected = options.find((option) => option.id === value);
+  
+  const trigger = (
+    <button type="button" className="choice-trigger" onClick={() => setOpen(true)}>
+      <span className={!selected ? 'placeholder' : ''}>{selected?.name ?? placeholder}</span>
+      <ChevronDown size={18} />
+    </button>
+  );
+
   const sheet = (
     <AnimatePresence>
       {open && (
@@ -1534,9 +1525,7 @@ function ChoiceInput({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={fadeSlide}
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setOpen(false);
-          }}
+          onClick={() => setOpen(false)}
         >
           <motion.div
             className="choice-sheet"
@@ -1575,10 +1564,7 @@ function ChoiceInput({
   return (
     <div className={label ? 'field' : 'choice-standalone'}>
       {label && <span>{label}</span>}
-      <button type="button" className="choice-trigger" onClick={() => setOpen(true)}>
-        <span className={!selected ? 'placeholder' : ''}>{selected?.name ?? placeholder}</span>
-        <ChevronDown size={18} />
-      </button>
+      {trigger}
       {createPortal(sheet, document.body)}
     </div>
   );
