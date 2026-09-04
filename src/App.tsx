@@ -52,7 +52,7 @@ import type {
   TaxonomyType
 } from './types';
 
-// ========== 改动1：添加 'review' 标签 ==========
+// ========== 添加 'review' 标签 ==========
 type TabKey = 'today' | 'import' | 'gallery' | 'calendar' | 'settings' | 'review';
 type SettingsPanel = 'learning' | 'taxonomy' | 'review' | 'backup' | 'storage';
 
@@ -116,7 +116,7 @@ const loadImportDraft = () => {
   }
 };
 
-// ========== 改动2：新增沉浸式复习组件 ==========
+// ========== 沉浸式复习组件 ==========
 function ReviewFullscreen({
   dueMistakes,
   imagesByMistake,
@@ -351,7 +351,7 @@ function App() {
     );
   }
 
-  // ========== 改动3：优先判断复习模式，直接全屏 ==========
+  // 沉浸复习模式优先
   if (activeTab === 'review') {
     return (
       <ReviewFullscreen
@@ -471,7 +471,7 @@ function App() {
   );
 }
 
-// ===== 以下所有组件保持原样（未改动） =====
+// ===== 其他组件 =====
 function TabButton({ active, icon, label, onClick }: { active: boolean; icon: JSX.Element; label: string; onClick: () => void }) {
   const reducedMotion = useReducedMotion();
   return (
@@ -495,7 +495,7 @@ function TabButton({ active, icon, label, onClick }: { active: boolean; icon: JS
   );
 }
 
-// ========== 改动4：修改 TodayView 只显示入口 ==========
+// ===== TodayView =====
 function TodayView({
   settings,
   dueMistakes,
@@ -532,7 +532,6 @@ function TodayView({
   );
 }
 
-// ===== 以下所有组件保持原样（从最初版本复制） =====
 function GaokaoCard({ examYear }: { examYear: number }) {
   const countdown = getGaokaoCountdown(examYear);
   return (
@@ -1405,6 +1404,7 @@ interface ChoiceOption {
   name: string;
 }
 
+// ===== 替换为原生 select 保证稳定 =====
 function ChoiceInput({
   label,
   value,
@@ -1418,61 +1418,39 @@ function ChoiceInput({
   placeholder?: string;
   onChange: (value: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const selected = options.find((option) => option.id === value);
-  const sheet = (
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          className="sheet-backdrop"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={fadeSlide}
-          onClick={() => setOpen(false)}
-        >
-          <motion.div
-            className="choice-sheet"
-            initial={{ opacity: 0, transform: 'translate3d(0, 18px, 0) scale(0.98)' }}
-            animate={{ opacity: 1, transform: 'translate3d(0, 0, 0) scale(1)' }}
-            exit={{ opacity: 0, transform: 'translate3d(0, 12px, 0) scale(0.98)' }}
-            transition={springSoft}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="choice-sheet-head">
-              <h2>{label ?? placeholder}</h2>
-              <MotionTapButton type="button" onClick={() => setOpen(false)}>完成</MotionTapButton>
-            </div>
-            <div className="choice-list">
-              {options.map((option) => (
-                <MotionTapButton
-                  key={option.id}
-                  type="button"
-                  className={option.id === value ? 'selected' : ''}
-                  onClick={() => {
-                    onChange(option.id);
-                    setOpen(false);
-                  }}
-                >
-                  <span>{option.name}</span>
-                  {option.id === value && <Check size={18} />}
-                </MotionTapButton>
-              ))}
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
+  const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    onChange(e.target.value);
+  };
 
   return (
     <div className={label ? 'field' : 'choice-standalone'}>
       {label && <span>{label}</span>}
-      <MotionTapButton type="button" className="choice-trigger" onClick={() => setOpen(true)}>
-        <span className={!selected ? 'placeholder' : ''}>{selected?.name ?? placeholder}</span>
-        <ChevronDown size={18} />
-      </MotionTapButton>
-      {createPortal(sheet, document.body)}
+      <select
+        value={value}
+        onChange={handleChange}
+        className="choice-select"
+        style={{
+          width: '100%',
+          height: '44px',
+          padding: '0 14px',
+          borderRadius: 'var(--radius-control)',
+          border: '1px solid var(--line)',
+          background: 'rgba(255,255,255,0.4)',
+          backdropFilter: 'blur(4px)',
+          color: 'var(--text)',
+          fontSize: '14px',
+          outline: 'none',
+          appearance: 'auto',
+          WebkitAppearance: 'auto',
+        }}
+      >
+        {!value && <option value="">{placeholder}</option>}
+        {options.map((option) => (
+          <option key={option.id} value={option.id}>
+            {option.name}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }
