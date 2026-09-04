@@ -1404,7 +1404,7 @@ interface ChoiceOption {
   name: string;
 }
 
-// ===== 替换为原生 select 保证稳定 =====
+// ===== 替换为原生 select 保证稳定，修复类型错误 =====
 function ChoiceInput({
   label,
   value,
@@ -1441,7 +1441,7 @@ function ChoiceInput({
           fontSize: '14px',
           outline: 'none',
           appearance: 'auto',
-          WebkitAppearance: 'auto',
+          // 移除 WebkitAppearance，避免 TypeScript 类型错误
         }}
       >
         {!value && <option value="">{placeholder}</option>}
