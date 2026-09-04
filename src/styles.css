@@ -126,7 +126,6 @@ h1 {
   color: var(--muted);
 }
 
-/* ===== 底部 Tab Bar ===== */
 .tabbar {
   position: fixed;
   left: 50%;
@@ -192,7 +191,6 @@ h1 {
   line-height: 1.1;
 }
 
-/* ===== 卡片毛玻璃 ===== */
 .gaokao-card,
 .mistake-card,
 .import-panel,
@@ -213,40 +211,6 @@ h1 {
 .calendar-panel:hover {
   transform: translateY(-3px);
   box-shadow: 0 24px 56px rgba(26, 38, 52, 0.08);
-}
-
-.gaokao-card {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: center;
-  gap: 16px;
-  padding: 16px 20px;
-  background: linear-gradient(135deg, rgba(61, 90, 139, 0.04), rgba(255, 255, 255, 0.5));
-}
-.gaokao-card h2 {
-  font-size: 20px;
-  font-weight: 600;
-}
-.countdown-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 48px);
-  gap: 6px;
-}
-.countdown-unit {
-  display: grid;
-  place-items: center;
-  min-height: 52px;
-  background: rgba(255, 255, 255, 0.4);
-  border-radius: 16px;
-  font-size: 11px;
-  color: var(--muted);
-  backdrop-filter: blur(4px);
-}
-.countdown-unit strong {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--primary);
-  line-height: 1.2;
 }
 
 .mistake-card {
@@ -523,7 +487,6 @@ input:focus, textarea:focus, select:focus {
   box-shadow: 0 0 0 4px var(--primary-soft);
 }
 
-/* ===== 美化选择器 ===== */
 select {
   appearance: none;
   -webkit-appearance: none;
@@ -562,6 +525,32 @@ select:focus option:checked {
   font-size: 14px;
 }
 .choice-trigger .placeholder { color: var(--muted); }
+
+.choice-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.choice-chips .chip {
+  padding: 6px 16px;
+  border-radius: 40px;
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,0.3);
+  backdrop-filter: blur(4px);
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.choice-chips .chip.selected {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+  color: var(--primary);
+  font-weight: 600;
+}
+.choice-chips .chip:active {
+  transform: scale(0.94);
+}
 
 .segmented {
   display: grid;
@@ -970,7 +959,6 @@ select:focus option:checked {
   font-size: 15px;
 }
 
-/* ===== 平板适配 ===== */
 @media (min-width: 768px) {
   .app-shell {
     padding-left: 100px;
