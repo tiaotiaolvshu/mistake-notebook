@@ -959,6 +959,7 @@ select:focus option:checked {
   font-size: 15px;
 }
 
+/* ===== 平板适配 ===== */
 @media (min-width: 768px) {
   .app-shell {
     padding-left: 100px;
@@ -1006,6 +1007,19 @@ select:focus option:checked {
   }
   .tab-label {
     display: none;
+  }
+
+  /* 导入页平板适配：左右两栏 */
+  .form-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .field.full,
+  .primary-action,
+  .import-panel {
+    grid-column: 1 / -1;
+  }
+  .gallery-grid {
+    grid-template-columns: 1fr 1fr;
   }
 }
 
