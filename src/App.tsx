@@ -114,7 +114,7 @@ const loadImportDraft = () => {
   }
 };
 
-// ========== 沉浸式复习组件 ==========
+// ========== 沉浸式复习组件（7:3 布局） ==========
 function ReviewFullscreen({
   dueMistakes,
   imagesByMistake,
@@ -127,6 +127,7 @@ function ReviewFullscreen({
   onBack: () => void;
 }) {
   const [index, setIndex] = useState(0);
+  const [showAnswer, setShowAnswer] = useState(false);
   const total = dueMistakes.length;
 
   if (total === 0) {
@@ -137,6 +138,7 @@ function ReviewFullscreen({
   const mistake = dueMistakes[index];
   const images = imagesByMistake.get(mistake.id) || [];
   const questionImages = images.filter(img => (img.role ?? 'question') === 'question');
+  const answerImages = images.filter(img => img.role === 'answer');
   const imgBlob = questionImages.length > 0 ? questionImages[0].imageBlob : null;
   const [url, setUrl] = useState<string | null>(null);
 
@@ -150,67 +152,223 @@ function ReviewFullscreen({
 
   const handleReview = async (result: ReviewResult) => {
     await onReviewed(mistake, result);
+    setShowAnswer(false);
     if (index + 1 < total) setIndex(index + 1);
     else onBack();
   };
+
+  useEffect(() => {
+    setShowAnswer(false);
+  }, [index]);
+
+  const handleShowAnswer = () => setShowAnswer(true);
 
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 999,
       background: 'linear-gradient(145deg, #eef2f7, #f7fafc)',
       display: 'grid',
-      gridTemplateRows: 'auto 1fr auto',
-      padding: '40px 20px env(safe-area-inset-bottom) 20px',
-      gap: '16px'
+      gridTemplateColumns: '7fr 3fr',
+      gap: '20px',
+      padding: '24px',
+      overflow: 'hidden'
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: '0.9rem', color: '#6b7a8f' }}>{index+1}/{total}</span>
-        <button onClick={onBack} style={{
-          background: 'rgba(255,255,255,0.4)',
-          backdropFilter: 'blur(10px)',
-          border: '1px solid rgba(255,255,255,0.3)',
-          borderRadius: '40px',
-          padding: '6px 16px',
-          cursor: 'pointer'
-        }}>退出</button>
-      </div>
+      {/* 左侧 7 */}
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '16px',
+        background: 'rgba(255,255,255,0.4)',
+        backdropFilter: 'blur(20px)',
+        borderRadius: '24px',
+        padding: '24px',
+        border: '1px solid rgba(255,255,255,0.3)',
+        height: '100%',
+        overflow: 'hidden'
+      }}>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: showAnswer ? '1fr 1fr' : '1fr',
+          gap: '16px',
+          flex: '1 1 auto',
+          minHeight: 0,
+          overflow: 'hidden'
+        }}>
+          {/* 原题 */}
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+            overflow: 'auto',
+            padding: '4px'
+          }}>
+            <h2 style={{ fontSize: '1.2rem', margin: 0 }}>题目</h2>
+            <div style={{ fontSize: '1rem', color: '#1a2634' }}>
+              {mistake.title || '（无标题）'}
+            </div>
+            {url && (
+              <div style={{ display: 'flex', justifyContent: 'center' }}>
+                <img src={url} alt="题目图片" style={{
+                  maxWidth: '100%',
+                  maxHeight: '60vh',
+                  objectFit: 'contain',
+                  borderRadius: '12px',
+                  background: 'rgba(255,255,255,0.2)',
+                  padding: '4px'
+                }} />
+              </div>
+            )}
+            {mistake.note && <div style={{ color: '#6b7a8f', fontSize: '0.9rem' }}>备注：{mistake.note}</div>}
+          </div>
 
-      <div style={{ display: 'grid', placeItems: 'center', height: '100%' }}>
-        {url ? (
-          <img src={url} alt="题目" style={{
-            maxWidth: '95%', maxHeight: '100%', objectFit: 'contain',
-            borderRadius: '20px',
-            background: 'rgba(255,255,255,0.2)',
-            backdropFilter: 'blur(6px)',
-            padding: '8px'
-          }} />
+          {/* 答案 */}
+          {showAnswer && (
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+              overflow: 'auto',
+              padding: '4px',
+              borderLeft: '1px solid rgba(200,212,226,0.3)',
+              paddingLeft: '16px'
+            }}>
+              <h2 style={{ fontSize: '1.2rem', margin: 0 }}>答案</h2>
+              <div style={{ fontSize: '1rem', whiteSpace: 'pre-wrap' }}>
+                {mistake.answer || '暂无答案，请自行查找'}
+              </div>
+              {answerImages.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {answerImages.map((img, idx) => (
+                    <img key={idx} src={URL.createObjectURL(img.imageBlob)} alt={`答案图${idx+1}`} style={{ maxWidth: '100%', maxHeight: '150px', objectFit: 'contain', borderRadius: '8px' }} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* 底部按钮 */}
+        {!showAnswer ? (
+          <motion.button
+            whileTap={{ scale: 0.96 }}
+            onClick={handleShowAnswer}
+            style={{
+              width: '100%',
+              padding: '12px',
+              borderRadius: '40px',
+              border: '1px solid rgba(255,255,255,0.3)',
+              background: 'rgba(61,90,139,0.15)',
+              backdropFilter: 'blur(8px)',
+              color: 'var(--primary)',
+              fontSize: '1rem',
+              fontWeight: '600',
+              cursor: 'pointer',
+              transition: 'background 0.2s'
+            }}
+          >
+            📖 显示答案
+          </motion.button>
         ) : (
-          <div style={{ fontSize: '1.5rem', color: '#6b7a8f' }}>📝 无图片</div>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'center',
+            gap: '12px',
+            flexWrap: 'wrap',
+            paddingTop: '8px',
+            borderTop: '1px solid rgba(200,212,226,0.2)'
+          }}>
+            {(['forgot', 'struggled', 'remembered', 'mastered'] as ReviewResult[]).map((r) => (
+              <motion.button
+                key={r}
+                whileTap={{ scale: 0.94 }}
+                onClick={() => handleReview(r)}
+                style={{
+                  flex: '1 1 20%',
+                  minWidth: '70px',
+                  padding: '10px 0',
+                  borderRadius: '30px',
+                  border: '1px solid rgba(255,255,255,0.3)',
+                  background: {
+                    forgot: 'rgba(196,90,106,0.7)',
+                    struggled: 'rgba(201,146,58,0.7)',
+                    remembered: 'rgba(58,140,122,0.7)',
+                    mastered: 'rgba(61,90,139,0.7)'
+                  }[r],
+                  backdropFilter: 'blur(10px)',
+                  color: 'white',
+                  fontSize: '0.9rem',
+                  fontWeight: '600',
+                  cursor: 'pointer'
+                }}
+              >
+                {reviewResultLabel[r]}
+              </motion.button>
+            ))}
+          </div>
         )}
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', flexWrap: 'wrap' }}>
-        {(['forgot', 'struggled', 'remembered', 'mastered'] as ReviewResult[]).map((r) => (
-          <button key={r} onClick={() => handleReview(r)} style={{
-            flex: '1 1 20%', minWidth: '70px',
-            padding: '12px 0',
-            borderRadius: '30px',
-            border: '1px solid rgba(255,255,255,0.3)',
-            background: {
-              forgot: 'rgba(196,90,106,0.7)',
-              struggled: 'rgba(201,146,58,0.7)',
-              remembered: 'rgba(58,140,122,0.7)',
-              mastered: 'rgba(58,90,140,0.7)'
-            }[r],
-            backdropFilter: 'blur(10px)',
-            color: 'white',
-            fontSize: '1rem',
-            fontWeight: '600',
-            cursor: 'pointer'
-          }}>
-            {reviewResultLabel[r]}
-          </button>
-        ))}
+      {/* 右侧 3：题号列表 */}
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '12px',
+        background: 'rgba(255,255,255,0.3)',
+        backdropFilter: 'blur(16px)',
+        borderRadius: '24px',
+        padding: '20px 16px',
+        border: '1px solid rgba(255,255,255,0.2)',
+        height: '100%',
+        overflow: 'auto'
+      }}>
+        <h3 style={{ margin: '0 0 8px 0', fontSize: '1rem', fontWeight: '600', color: 'var(--text)' }}>题号</h3>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {dueMistakes.map((_, i) => {
+            const isActive = i === index;
+            const isAnswered = i < index;
+            return (
+              <motion.button
+                key={i}
+                whileTap={{ scale: 0.92 }}
+                onClick={() => { setIndex(i); setShowAnswer(false); }}
+                style={{
+                  width: '100%',
+                  padding: '8px',
+                  borderRadius: '40px',
+                  border: isActive ? '2px solid var(--primary)' : '1px solid rgba(255,255,255,0.2)',
+                  background: isAnswered ? 'rgba(58,140,122,0.2)' : 'rgba(255,255,255,0.1)',
+                  backdropFilter: 'blur(4px)',
+                  color: isActive ? 'var(--primary)' : 'var(--text)',
+                  fontWeight: isActive ? '700' : '400',
+                  fontSize: '0.9rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <span style={{
+                  display: 'inline-block',
+                  width: '28px',
+                  height: '28px',
+                  borderRadius: '50%',
+                  background: isAnswered ? 'rgba(58,140,122,0.3)' : 'transparent',
+                  border: isAnswered ? '2px solid #3a8c7a' : '2px solid #6b7a8f',
+                  color: isAnswered ? '#3a8c7a' : '#6b7a8f',
+                  lineHeight: '28px',
+                  textAlign: 'center',
+                  fontSize: '0.8rem',
+                  fontWeight: '600'
+                }}>
+                  {i+1}
+                </span>
+                {isAnswered && <Check size={14} style={{ color: '#3a8c7a' }} />}
+              </motion.button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -528,7 +686,7 @@ function TodayView({
   );
 }
 
-// ===== ImportView（并排按钮，无下拉，平板左右布局） =====
+// ===== ImportView（7:3 布局） =====
 function ImportView({
   settings,
   taxonomiesByType,
@@ -659,23 +817,27 @@ function ImportView({
   };
 
   return (
-    <section className="stack">
-      <div className="import-panel" style={{ padding: '20px', borderRadius: 'var(--radius-card)', background: 'var(--surface)', backdropFilter: 'blur(18px)', border: '1px solid rgba(255,255,255,0.4)' }}>
-        <SectionHeading title="导入错题" meta={`${questionImages.length + answerImages.length} 张图片`} />
-        <input ref={questionInputRef} hidden type="file" accept="image/*" multiple onChange={(event) => addFiles(Array.from(event.target.files ?? []), 'question')} />
-        <input ref={answerInputRef} hidden type="file" accept="image/*" multiple onChange={(event) => addFiles(Array.from(event.target.files ?? []), 'answer')} />
-
-        <ImagePickerPanel
-          title="题目图片"
-          images={questionImages}
-          onGallery={() => handlePickNative('question')}
-          onCamera={() => handleCamera('question')}
-          onRemove={(id) => removePending(id, 'question')}
-        />
-
-        <div className="form-grid">
-          <TextInput label="标题" value={draft.title} placeholder="可不填" onChange={(title) => onDraftChange({ ...draft, title })} />
-
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '7fr 3fr',
+        gap: '24px',
+        padding: '24px',
+        borderRadius: 'var(--radius-card)',
+        background: 'rgba(255,255,255,0.4)',
+        backdropFilter: 'blur(24px) saturate(1.3)',
+        WebkitBackdropFilter: 'blur(24px) saturate(1.3)',
+        border: '1px solid rgba(255,255,255,0.3)',
+        boxShadow: '0 16px 40px rgba(26,38,52,0.06)'
+      }}
+    >
+      {/* 左侧 7：表单选项 */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <SectionHeading title="添加错题" meta={`${questionImages.length + answerImages.length} 张图片`} />
+        <div className="form-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
           <div className="field">
             <span>科目</span>
             <div className="choice-chips">
@@ -691,7 +853,6 @@ function ImportView({
               ))}
             </div>
           </div>
-
           <div className="field">
             <span>错因</span>
             <div className="choice-chips">
@@ -707,8 +868,7 @@ function ImportView({
               ))}
             </div>
           </div>
-
-          <div className="field full">
+          <div className="field" style={{ gridColumn: '1 / -1' }}>
             <span>题源</span>
             <input
               value={draft.sourceName}
@@ -728,7 +888,6 @@ function ImportView({
               ))}
             </div>
           </div>
-
           <label className="field">
             <span>难度</span>
             <div className="segmented">
@@ -744,29 +903,144 @@ function ImportView({
               ))}
             </div>
           </label>
-
           <TextArea label="备注" value={draft.note} onChange={(note) => onDraftChange({ ...draft, note })} />
-          <AnswerField
-            value={draft.answer}
-            images={answerImages}
-            onChange={(answer) => onDraftChange({ ...draft, answer })}
-            onGallery={() => handlePickNative('answer')}
-            onCamera={() => handleCamera('answer')}
-            onRemove={(id) => removePending(id, 'answer')}
-          />
           <TextArea label="启发" value={draft.inspiration} onChange={(inspiration) => onDraftChange({ ...draft, inspiration })} />
         </div>
+      </div>
+
+      {/* 右侧 3：标题、图片导入、答案、存入按钮 */}
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '16px',
+        background: 'rgba(255,255,255,0.25)',
+        backdropFilter: 'blur(8px)',
+        borderRadius: 'var(--radius-control)',
+        padding: '16px',
+        border: '1px solid rgba(255,255,255,0.2)'
+      }}>
+        <input ref={questionInputRef} hidden type="file" accept="image/*" multiple onChange={(event) => addFiles(Array.from(event.target.files ?? []), 'question')} />
+        <input ref={answerInputRef} hidden type="file" accept="image/*" multiple onChange={(event) => addFiles(Array.from(event.target.files ?? []), 'answer')} />
+
+        <TextInput label="标题" value={draft.title} placeholder="可不填" onChange={(title) => onDraftChange({ ...draft, title })} />
+
+        <div className="field">
+          <span>题目图片</span>
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+            <MotionTapButton type="button" onClick={() => handlePickNative('question')} style={{ flex: 1, padding: '8px', borderRadius: 'var(--radius-control)', background: 'rgba(61,90,139,0.1)', border: '1px solid var(--line)', fontSize: '0.8rem' }}>📷 相册</MotionTapButton>
+            <MotionTapButton type="button" onClick={() => handleCamera('question')} style={{ flex: 1, padding: '8px', borderRadius: 'var(--radius-control)', background: 'rgba(61,90,139,0.1)', border: '1px solid var(--line)', fontSize: '0.8rem' }}>📸 拍照</MotionTapButton>
+          </div>
+          <PreviewGrid images={questionImages} onRemove={(id) => removePending(id, 'question')} />
+        </div>
+
+        <AnswerField
+          value={draft.answer}
+          images={answerImages}
+          onChange={(answer) => onDraftChange({ ...draft, answer })}
+          onGallery={() => handlePickNative('answer')}
+          onCamera={() => handleCamera('answer')}
+          onRemove={(id) => removePending(id, 'answer')}
+        />
 
         {error && <p className="form-error">{error}</p>}
         <MotionTapButton className="primary-action" type="button" disabled={saving} onClick={handleSave}>
           {saving ? '保存中' : '存入错题本'}
         </MotionTapButton>
       </div>
-    </section>
+    </motion.div>
   );
 }
 
-// ===== 以下组件保持原样（原版） =====
+// ===== GalleryView（5:5 两列） =====
+function GalleryView({
+  mistakes,
+  imagesByMistake,
+  taxonomyMap,
+  taxonomiesByType,
+  onArchive
+}: {
+  mistakes: MistakeItem[];
+  imagesByMistake: Map<string, ImageAsset[]>;
+  taxonomyMap: Map<string, string>;
+  taxonomiesByType: Record<TaxonomyType, TaxonomyOption[]>;
+  onArchive: (mistake: MistakeItem) => Promise<void>;
+}) {
+  const [query, setQuery] = useState('');
+  const [subjectId, setSubjectId] = useState('');
+  const [causeId, setCauseId] = useState('');
+  const [difficulty, setDifficulty] = useState('');
+  const difficultyOptions = [
+    { id: '', name: '全部难度' },
+    ...(['hard', 'medium', 'easy'] as Difficulty[]).map((item) => ({ id: item, name: difficultyLabel[item] }))
+  ];
+
+  const filtered = mistakes.filter((mistake) => {
+    const text = `${mistake.title} ${mistake.note} ${mistake.answer} ${mistake.inspiration} ${mistake.sourceName}`.toLowerCase();
+    return (
+      (!query.trim() || text.includes(query.trim().toLowerCase())) &&
+      (!subjectId || mistake.subjectId === subjectId) &&
+      (!causeId || mistake.causeId === causeId) &&
+      (!difficulty || mistake.difficulty === difficulty)
+    );
+  });
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '16px',
+        padding: '20px',
+        borderRadius: 'var(--radius-card)',
+        background: 'rgba(255,255,255,0.35)',
+        backdropFilter: 'blur(20px) saturate(1.2)',
+        WebkitBackdropFilter: 'blur(20px) saturate(1.2)',
+        border: '1px solid rgba(255,255,255,0.3)'
+      }}
+    >
+      <SectionHeading title="错题画廊" meta={`${filtered.length} 道`} />
+      <div className="search-box">
+        <Search size={18} />
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索标题、备注、题源、答案、启发" />
+      </div>
+      <div className="filter-row">
+        <MiniSelect value={subjectId} options={taxonomiesByType.subject} placeholder="全部科目" onChange={setSubjectId} />
+        <MiniSelect value={causeId} options={taxonomiesByType.cause} placeholder="全部错因" onChange={setCauseId} />
+        <ChoiceInput value={difficulty} options={difficultyOptions} placeholder="全部难度" onChange={setDifficulty} />
+      </div>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: '16px',
+        overflow: 'auto',
+        maxHeight: '70vh'
+      }}>
+        {filtered.map((mistake) => (
+          <MistakeCard
+            key={mistake.id}
+            mistake={mistake}
+            compact
+            images={imagesByMistake.get(mistake.id) ?? []}
+            taxonomyMap={taxonomyMap}
+            onArchive={onArchive}
+          />
+        ))}
+      </div>
+      {filtered.length === 0 && <EmptyState icon={<MoreHorizontal />} title="没找到" text="换个筛选试试。" />}
+    </motion.div>
+  );
+}
+
+// ===== 以下组件保持原样（未修改） =====
+// ImagePickerPanel, AnswerField, PreviewGrid, SourceInput, CalendarView, SettingsView, SettingsAccordion, ReviewPreview, TaxonomyEditor, MistakeCard, ImageStrip, SectionHeading, EmptyState, TextInput, TextArea, ChoiceInput, SelectInput, MiniSelect, ImageLightbox, MotionTapButton, parseIntervals
+
+// 由于它们没有改动，这里仅保留占位，实际需要从原文件中复制完整实现。
+// 为了确保你直接可用，我会在下方包含这些组件的完整代码（从原项目中提取）。
+
+// ===== ImagePickerPanel =====
 function ImagePickerPanel({
   title,
   images,
@@ -801,6 +1075,7 @@ function ImagePickerPanel({
   );
 }
 
+// ===== AnswerField =====
 function AnswerField({
   value,
   images,
@@ -835,6 +1110,7 @@ function AnswerField({
   );
 }
 
+// ===== PreviewGrid =====
 function PreviewGrid({ images, onRemove }: { images: PendingImage[]; onRemove: (id: string) => void }) {
   const [viewer, setViewer] = useState<{ src: string; title: string } | null>(null);
 
@@ -871,6 +1147,7 @@ function PreviewGrid({ images, onRemove }: { images: PendingImage[]; onRemove: (
   );
 }
 
+// ===== SourceInput =====
 function SourceInput({
   value,
   options,
@@ -897,69 +1174,7 @@ function SourceInput({
   );
 }
 
-function GalleryView({
-  mistakes,
-  imagesByMistake,
-  taxonomyMap,
-  taxonomiesByType,
-  onArchive
-}: {
-  mistakes: MistakeItem[];
-  imagesByMistake: Map<string, ImageAsset[]>;
-  taxonomyMap: Map<string, string>;
-  taxonomiesByType: Record<TaxonomyType, TaxonomyOption[]>;
-  onArchive: (mistake: MistakeItem) => Promise<void>;
-}) {
-  const [query, setQuery] = useState('');
-  const [subjectId, setSubjectId] = useState('');
-  const [causeId, setCauseId] = useState('');
-  const [difficulty, setDifficulty] = useState('');
-  const difficultyOptions = [
-    { id: '', name: '全部难度' },
-    ...(['hard', 'medium', 'easy'] as Difficulty[]).map((item) => ({ id: item, name: difficultyLabel[item] }))
-  ];
-
-  const filtered = mistakes.filter((mistake) => {
-    const text = `${mistake.title} ${mistake.note} ${mistake.answer} ${mistake.inspiration} ${mistake.sourceName}`.toLowerCase();
-    return (
-      (!query.trim() || text.includes(query.trim().toLowerCase())) &&
-      (!subjectId || mistake.subjectId === subjectId) &&
-      (!causeId || mistake.causeId === causeId) &&
-      (!difficulty || mistake.difficulty === difficulty)
-    );
-  });
-
-  return (
-    <section className="stack">
-      <SectionHeading title="错题画廊" meta={`${filtered.length} 道`} />
-      <div className="search-box">
-        <Search size={18} />
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索标题、备注、题源、答案、启发" />
-      </div>
-      <div className="filter-row">
-        <MiniSelect value={subjectId} options={taxonomiesByType.subject} placeholder="全部科目" onChange={setSubjectId} />
-        <MiniSelect value={causeId} options={taxonomiesByType.cause} placeholder="全部错因" onChange={setCauseId} />
-        <ChoiceInput value={difficulty} options={difficultyOptions} placeholder="全部难度" onChange={setDifficulty} />
-      </div>
-      <motion.div className="gallery-grid">
-        <AnimatePresence initial={false}>
-          {filtered.map((mistake) => (
-            <MistakeCard
-              key={mistake.id}
-              mistake={mistake}
-              compact
-              images={imagesByMistake.get(mistake.id) ?? []}
-              taxonomyMap={taxonomyMap}
-              onArchive={onArchive}
-            />
-          ))}
-        </AnimatePresence>
-      </motion.div>
-      {filtered.length === 0 && <EmptyState icon={<MoreHorizontal />} title="没找到" text="换个筛选试试。" />}
-    </section>
-  );
-}
-
+// ===== CalendarView =====
 function CalendarView({
   mistakes,
   imagesByMistake,
