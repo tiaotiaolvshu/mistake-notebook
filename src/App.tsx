@@ -114,6 +114,121 @@ const loadImportDraft = () => {
   }
 };
 
+// ========== 分段控制器（自动换行，平滑跨行滑动） ==========
+function SegmentedControl<T extends string>({
+  options,
+  value,
+  onChange,
+  label
+}: {
+  options: { id: T; name: string }[];
+  value: T;
+  onChange: (val: T) => void;
+  label?: string;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [sliderStyle, setSliderStyle] = useState<{ left: number; top: number; width: number; height: number }>({
+    left: 0,
+    top: 0,
+    width: 0,
+    height: 0,
+  });
+  const [isReady, setIsReady] = useState(false);
+
+  const updateSlider = () => {
+    if (!containerRef.current) return;
+    const buttons = containerRef.current.querySelectorAll('.segmented-option');
+    const index = options.findIndex((opt) => opt.id === value);
+    if (index === -1 || index >= buttons.length) return;
+    const btn = buttons[index] as HTMLElement;
+    const rect = btn.getBoundingClientRect();
+    const containerRect = containerRef.current.getBoundingClientRect();
+    setSliderStyle({
+      left: rect.left - containerRect.left,
+      top: rect.top - containerRect.top,
+      width: rect.width,
+      height: rect.height,
+    });
+    setIsReady(true);
+  };
+
+  useEffect(() => {
+    // 延迟执行确保布局稳定
+    const timeout = setTimeout(updateSlider, 50);
+    window.addEventListener('resize', updateSlider);
+    return () => {
+      clearTimeout(timeout);
+      window.removeEventListener('resize', updateSlider);
+    };
+  }, [value, options]);
+
+  // 当选项变化时重新计算
+  useEffect(() => {
+    updateSlider();
+  }, [options]);
+
+  return (
+    <div className="field" style={{ gap: '4px' }}>
+      {label && <span>{label}</span>}
+      <div
+        ref={containerRef}
+        style={{
+          position: 'relative',
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '4px',
+          background: 'rgba(255,255,255,0.15)',
+          borderRadius: 'var(--radius-control)',
+          padding: '4px',
+          minHeight: '44px',
+          border: '1px solid rgba(255,255,255,0.1)',
+        }}
+      >
+        {isReady && (
+          <motion.div
+            layoutId="segmented-slider"
+            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+            style={{
+              position: 'absolute',
+              background: 'rgba(61,90,139,0.2)',
+              backdropFilter: 'blur(4px)',
+              borderRadius: 'calc(var(--radius-control) - 4px)',
+              border: '1px solid rgba(255,255,255,0.2)',
+              pointerEvents: 'none',
+              ...sliderStyle,
+            }}
+          />
+        )}
+        {options.map((opt) => (
+          <button
+            key={opt.id}
+            className="segmented-option"
+            onClick={() => onChange(opt.id)}
+            style={{
+              flex: '1 0 auto',
+              minWidth: '60px',
+              padding: '6px 12px',
+              borderRadius: 'calc(var(--radius-control) - 4px)',
+              border: 'none',
+              background: 'transparent',
+              color: value === opt.id ? 'var(--primary)' : 'var(--muted)',
+              fontWeight: value === opt.id ? '600' : '400',
+              fontSize: '0.9rem',
+              cursor: 'pointer',
+              position: 'relative',
+              zIndex: 1,
+              transition: 'color 0.2s',
+              textAlign: 'center',
+            }}
+          >
+            {opt.name}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ========== 沉浸式复习组件（7:3 布局） ==========
 function ReviewFullscreen({
   dueMistakes,
@@ -128,6 +243,7 @@ function ReviewFullscreen({
 }) {
   const [index, setIndex] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
+  const [answeredState, setAnsweredState] = useState<boolean[]>(() => new Array(dueMistakes.length).fill(false));
   const total = dueMistakes.length;
 
   if (total === 0) {
@@ -152,6 +268,11 @@ function ReviewFullscreen({
 
   const handleReview = async (result: ReviewResult) => {
     await onReviewed(mistake, result);
+    setAnsweredState(prev => {
+      const newState = [...prev];
+      newState[index] = true;
+      return newState;
+    });
     setShowAnswer(false);
     if (index + 1 < total) setIndex(index + 1);
     else onBack();
@@ -173,7 +294,6 @@ function ReviewFullscreen({
       padding: '24px',
       overflow: 'hidden'
     }}>
-      {/* 左侧 7 */}
       <div style={{
         display: 'flex',
         flexDirection: 'column',
@@ -204,7 +324,7 @@ function ReviewFullscreen({
           }}>
             <h2 style={{ fontSize: '1.2rem', margin: 0 }}>题目</h2>
             <div style={{ fontSize: '1rem', color: '#1a2634' }}>
-              {mistake.title || '（无标题）'}
+              {mistake.title || ''}
             </div>
             {url && (
               <div style={{ display: 'flex', justifyContent: 'center' }}>
@@ -233,21 +353,21 @@ function ReviewFullscreen({
               paddingLeft: '16px'
             }}>
               <h2 style={{ fontSize: '1.2rem', margin: 0 }}>答案</h2>
-              <div style={{ fontSize: '1rem', whiteSpace: 'pre-wrap' }}>
-                {mistake.answer || '暂无答案，请自行查找'}
-              </div>
-              {answerImages.length > 0 && (
+              {answerImages.length > 0 ? (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                   {answerImages.map((img, idx) => (
                     <img key={idx} src={URL.createObjectURL(img.imageBlob)} alt={`答案图${idx+1}`} style={{ maxWidth: '100%', maxHeight: '150px', objectFit: 'contain', borderRadius: '8px' }} />
                   ))}
+                </div>
+              ) : (
+                <div style={{ fontSize: '1rem', whiteSpace: 'pre-wrap' }}>
+                  {mistake.answer || '暂无答案，请自行查找'}
                 </div>
               )}
             </div>
           )}
         </div>
 
-        {/* 底部按钮 */}
         {!showAnswer ? (
           <motion.button
             whileTap={{ scale: 0.96 }}
@@ -308,7 +428,7 @@ function ReviewFullscreen({
         )}
       </div>
 
-      {/* 右侧 3：题号列表 */}
+      {/* 右侧 3：题号 + 退出 */}
       <div style={{
         display: 'flex',
         flexDirection: 'column',
@@ -316,59 +436,89 @@ function ReviewFullscreen({
         background: 'rgba(255,255,255,0.3)',
         backdropFilter: 'blur(16px)',
         borderRadius: '24px',
-        padding: '20px 16px',
+        padding: '20px 16px 16px 16px',
         border: '1px solid rgba(255,255,255,0.2)',
         height: '100%',
-        overflow: 'auto'
+        overflow: 'hidden',
+        justifyContent: 'space-between'
       }}>
-        <h3 style={{ margin: '0 0 8px 0', fontSize: '1rem', fontWeight: '600', color: 'var(--text)' }}>题号</h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {dueMistakes.map((_, i) => {
-            const isActive = i === index;
-            const isAnswered = i < index;
-            return (
-              <motion.button
-                key={i}
-                whileTap={{ scale: 0.92 }}
-                onClick={() => { setIndex(i); setShowAnswer(false); }}
-                style={{
-                  width: '100%',
-                  padding: '8px',
-                  borderRadius: '40px',
-                  border: isActive ? '2px solid var(--primary)' : '1px solid rgba(255,255,255,0.2)',
-                  background: isAnswered ? 'rgba(58,140,122,0.2)' : 'rgba(255,255,255,0.1)',
-                  backdropFilter: 'blur(4px)',
-                  color: isActive ? 'var(--primary)' : 'var(--text)',
-                  fontWeight: isActive ? '700' : '400',
-                  fontSize: '0.9rem',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  transition: 'all 0.2s'
-                }}
-              >
-                <span style={{
-                  display: 'inline-block',
-                  width: '28px',
-                  height: '28px',
-                  borderRadius: '50%',
-                  background: isAnswered ? 'rgba(58,140,122,0.3)' : 'transparent',
-                  border: isAnswered ? '2px solid #3a8c7a' : '2px solid #6b7a8f',
-                  color: isAnswered ? '#3a8c7a' : '#6b7a8f',
-                  lineHeight: '28px',
-                  textAlign: 'center',
-                  fontSize: '0.8rem',
-                  fontWeight: '600'
-                }}>
+        <div style={{ overflow: 'auto' }}>
+          <h3 style={{ margin: '0 0 12px 0', fontSize: '1rem', fontWeight: '600', color: 'var(--text)' }}>题号</h3>
+          <div style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '8px',
+            justifyContent: 'flex-start'
+          }}>
+            {dueMistakes.map((_, i) => {
+              const isActive = i === index;
+              const isAnswered = answeredState[i];
+              return (
+                <motion.button
+                  key={i}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => { setIndex(i); setShowAnswer(false); }}
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '50%',
+                    border: isActive ? '2px solid var(--primary)' : '2px solid #6b7a8f',
+                    background: isAnswered ? 'rgba(58,140,122,0.25)' : 'rgba(255,255,255,0.1)',
+                    backdropFilter: 'blur(4px)',
+                    color: isActive ? 'var(--primary)' : 'var(--text)',
+                    fontWeight: isActive ? '700' : '400',
+                    fontSize: '0.8rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.2s',
+                    position: 'relative'
+                  }}
+                >
                   {i+1}
-                </span>
-                {isAnswered && <Check size={14} style={{ color: '#3a8c7a' }} />}
-              </motion.button>
-            );
-          })}
+                  {isAnswered && (
+                    <span style={{
+                      position: 'absolute',
+                      top: '-4px',
+                      right: '-4px',
+                      width: '14px',
+                      height: '14px',
+                      background: '#3a8c7a',
+                      borderRadius: '50%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '8px',
+                      color: 'white'
+                    }}>
+                      ✓
+                    </span>
+                  )}
+                </motion.button>
+              );
+            })}
+          </div>
         </div>
+        <motion.button
+          whileTap={{ scale: 0.96 }}
+          onClick={onBack}
+          style={{
+            width: '100%',
+            padding: '10px 0',
+            borderRadius: '40px',
+            border: '1px solid rgba(255,255,255,0.3)',
+            background: 'rgba(196,90,106,0.15)',
+            backdropFilter: 'blur(8px)',
+            color: '#c45a6a',
+            fontSize: '0.9rem',
+            fontWeight: '600',
+            cursor: 'pointer',
+            transition: 'background 0.2s'
+          }}
+        >
+          退出复习
+        </motion.button>
       </div>
     </div>
   );
@@ -650,7 +800,7 @@ function TabButton({ active, icon, label, onClick }: { active: boolean; icon: JS
   );
 }
 
-// ===== TodayView（移除高考卡片） =====
+// ===== TodayView =====
 function TodayView({
   settings,
   dueMistakes,
@@ -686,7 +836,7 @@ function TodayView({
   );
 }
 
-// ===== ImportView（7:3 布局） =====
+// ===== ImportView（7:3 布局，使用分段控制器） =====
 function ImportView({
   settings,
   taxonomiesByType,
@@ -810,12 +960,6 @@ function ImportView({
     }
   };
 
-  const selectOption = (type: 'subject' | 'cause' | 'source', id: string, name?: string) => {
-    if (type === 'subject') onDraftChange({ ...draft, subjectId: id });
-    else if (type === 'cause') onDraftChange({ ...draft, causeId: id });
-    else if (type === 'source') onDraftChange({ ...draft, sourceId: id, sourceName: name || '' });
-  };
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -834,40 +978,22 @@ function ImportView({
         boxShadow: '0 16px 40px rgba(26,38,52,0.06)'
       }}
     >
-      {/* 左侧 7：表单选项 */}
+      {/* 左侧 7 */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <SectionHeading title="添加错题" meta={`${questionImages.length + answerImages.length} 张图片`} />
         <div className="form-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-          <div className="field">
-            <span>科目</span>
-            <div className="choice-chips">
-              {taxonomiesByType.subject.map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  className={`chip ${draft.subjectId === opt.id ? 'selected' : ''}`}
-                  onClick={() => selectOption('subject', opt.id)}
-                >
-                  {opt.name}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="field">
-            <span>错因</span>
-            <div className="choice-chips">
-              {taxonomiesByType.cause.map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  className={`chip ${draft.causeId === opt.id ? 'selected' : ''}`}
-                  onClick={() => selectOption('cause', opt.id)}
-                >
-                  {opt.name}
-                </button>
-              ))}
-            </div>
-          </div>
+          <SegmentedControl
+            label="科目"
+            options={taxonomiesByType.subject.map(opt => ({ id: opt.id, name: opt.name }))}
+            value={draft.subjectId}
+            onChange={(val) => onDraftChange({ ...draft, subjectId: val })}
+          />
+          <SegmentedControl
+            label="错因"
+            options={taxonomiesByType.cause.map(opt => ({ id: opt.id, name: opt.name }))}
+            value={draft.causeId}
+            onChange={(val) => onDraftChange({ ...draft, causeId: val })}
+          />
           <div className="field" style={{ gridColumn: '1 / -1' }}>
             <span>题源</span>
             <input
@@ -881,7 +1007,7 @@ function ImportView({
                   key={opt.id}
                   type="button"
                   className={`chip ${draft.sourceId === opt.id ? 'selected' : ''}`}
-                  onClick={() => selectOption('source', opt.id, opt.name)}
+                  onClick={() => onDraftChange({ ...draft, sourceId: opt.id, sourceName: opt.name })}
                 >
                   {opt.name}
                 </button>
@@ -908,7 +1034,7 @@ function ImportView({
         </div>
       </div>
 
-      {/* 右侧 3：标题、图片导入、答案、存入按钮 */}
+      {/* 右侧 3 */}
       <div style={{
         display: 'flex',
         flexDirection: 'column',
@@ -1034,13 +1160,13 @@ function GalleryView({
   );
 }
 
-// ===== 以下组件保持原样（未修改） =====
+// ===== 以下组件保持原样 =====
 // ImagePickerPanel, AnswerField, PreviewGrid, SourceInput, CalendarView, SettingsView, SettingsAccordion, ReviewPreview, TaxonomyEditor, MistakeCard, ImageStrip, SectionHeading, EmptyState, TextInput, TextArea, ChoiceInput, SelectInput, MiniSelect, ImageLightbox, MotionTapButton, parseIntervals
 
-// 由于它们没有改动，这里仅保留占位，实际需要从原文件中复制完整实现。
-// 为了确保你直接可用，我会在下方包含这些组件的完整代码（从原项目中提取）。
+// 这些组件已在之前的版本中完整定义，此处为节省篇幅省略，实际使用时可从原文件中复制。
+// 但为了确保完整，我会在下面补全所有组件（由于对话长度限制，我将在后续消息中提供剩余部分）。
+// ===== 以下组件保持原样（紧接在 GalleryView 后面） =====
 
-// ===== ImagePickerPanel =====
 function ImagePickerPanel({
   title,
   images,
@@ -1075,7 +1201,6 @@ function ImagePickerPanel({
   );
 }
 
-// ===== AnswerField =====
 function AnswerField({
   value,
   images,
@@ -1110,7 +1235,6 @@ function AnswerField({
   );
 }
 
-// ===== PreviewGrid =====
 function PreviewGrid({ images, onRemove }: { images: PendingImage[]; onRemove: (id: string) => void }) {
   const [viewer, setViewer] = useState<{ src: string; title: string } | null>(null);
 
@@ -1147,7 +1271,6 @@ function PreviewGrid({ images, onRemove }: { images: PendingImage[]; onRemove: (
   );
 }
 
-// ===== SourceInput =====
 function SourceInput({
   value,
   options,
@@ -1174,7 +1297,6 @@ function SourceInput({
   );
 }
 
-// ===== CalendarView =====
 function CalendarView({
   mistakes,
   imagesByMistake,
@@ -1275,7 +1397,6 @@ function CalendarView({
   );
 }
 
-// ===== SettingsView（移除学习信息） =====
 function SettingsView({
   settings,
   taxonomiesByType,
@@ -1301,6 +1422,7 @@ function SettingsView({
   const handleSaveIntervals = async () => {
     await updateSettings({ reviewIntervals: parsedIntervals });
     await onRefresh();
+    onToast('复习间隔已保存');
   };
 
   const handleAdd = async (type: TaxonomyType) => {
@@ -1340,7 +1462,23 @@ function SettingsView({
           <input value={intervalText} onChange={(event) => setIntervalText(event.target.value)} placeholder="1, 2, 4, 7, 15, 30, 60" />
         </label>
         <ReviewPreview intervals={parsedIntervals} />
-        <MotionTapButton type="button" className="mini-primary" onClick={handleSaveIntervals}>保存策略</MotionTapButton>
+        <MotionTapButton
+          className="mini-primary"
+          onClick={handleSaveIntervals}
+          style={{
+            background: 'rgba(61,90,139,0.15)',
+            backdropFilter: 'blur(8px)',
+            border: '1px solid rgba(255,255,255,0.3)',
+            color: 'var(--primary)',
+            padding: '8px 20px',
+            borderRadius: '40px',
+            fontWeight: '600',
+            cursor: 'pointer',
+            transition: 'all 0.2s'
+          }}
+        >
+          保存策略
+        </MotionTapButton>
       </SettingsAccordion>
 
       <SettingsAccordion icon={<Download />} title="数据备份" open={open === 'backup'} onToggle={() => setOpen(open === 'backup' ? null : 'backup')}>
