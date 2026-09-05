@@ -114,7 +114,7 @@ const loadImportDraft = () => {
   }
 };
 
-// ========== 分段控制器（自动换行，平滑跨行滑动） ==========
+// ========== 分段控制器（支持换行，平滑跨行滑动） ==========
 function SegmentedControl<T extends string>({
   options,
   value,
@@ -153,8 +153,7 @@ function SegmentedControl<T extends string>({
   };
 
   useEffect(() => {
-    // 延迟执行确保布局稳定
-    const timeout = setTimeout(updateSlider, 50);
+    const timeout = setTimeout(updateSlider, 20);
     window.addEventListener('resize', updateSlider);
     return () => {
       clearTimeout(timeout);
@@ -162,7 +161,6 @@ function SegmentedControl<T extends string>({
     };
   }, [value, options]);
 
-  // 当选项变化时重新计算
   useEffect(() => {
     updateSlider();
   }, [options]);
@@ -187,7 +185,7 @@ function SegmentedControl<T extends string>({
         {isReady && (
           <motion.div
             layoutId="segmented-slider"
-            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+            transition={{ type: 'spring', stiffness: 500, damping: 30 }}
             style={{
               position: 'absolute',
               background: 'rgba(61,90,139,0.2)',
@@ -268,14 +266,20 @@ function ReviewFullscreen({
 
   const handleReview = async (result: ReviewResult) => {
     await onReviewed(mistake, result);
-    setAnsweredState(prev => {
-      const newState = [...prev];
-      newState[index] = true;
-      return newState;
-    });
+    const newAnswered = [...answeredState];
+    newAnswered[index] = true;
+    setAnsweredState(newAnswered);
     setShowAnswer(false);
-    if (index + 1 < total) setIndex(index + 1);
-    else onBack();
+
+    const allAnswered = newAnswered.every(v => v === true);
+    if (allAnswered) {
+      onBack();
+      return;
+    }
+
+    let nextIndex = index + 1;
+    if (nextIndex >= total) nextIndex = 0;
+    setIndex(nextIndex);
   };
 
   useEffect(() => {
@@ -776,7 +780,7 @@ function App() {
   );
 }
 
-// ===== TabButton =====
+// ===== TabButton（平板侧边栏高亮带弹簧动画） =====
 function TabButton({ active, icon, label, onClick }: { active: boolean; icon: JSX.Element; label: string; onClick: () => void }) {
   const reducedMotion = useReducedMotion();
   return (
@@ -791,7 +795,7 @@ function TabButton({ active, icon, label, onClick }: { active: boolean; icon: JS
         <motion.span
           className="tab-highlight"
           layoutId="tab-highlight"
-          transition={reducedMotion ? { duration: 0 } : springSnappy}
+          transition={reducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 400, damping: 25 }}
         />
       )}
       <span className="tab-icon">{icon}</span>
@@ -836,7 +840,7 @@ function TodayView({
   );
 }
 
-// ===== ImportView（7:3 布局，使用分段控制器） =====
+// ===== ImportView（7:3 布局，所有分段控制器统一） =====
 function ImportView({
   settings,
   taxonomiesByType,
@@ -1014,21 +1018,17 @@ function ImportView({
               ))}
             </div>
           </div>
-          <label className="field">
-            <span>难度</span>
-            <div className="segmented">
-              {(['hard', 'medium', 'easy'] as Difficulty[]).map((difficulty) => (
-                <MotionTapButton
-                  key={difficulty}
-                  type="button"
-                  className={draft.difficulty === difficulty ? 'selected' : ''}
-                  onClick={() => onDraftChange({ ...draft, difficulty })}
-                >
-                  {difficultyLabel[difficulty]}
-                </MotionTapButton>
-              ))}
-            </div>
-          </label>
+          {/* 难度改用 SegmentedControl */}
+          <SegmentedControl
+            label="难度"
+            options={[
+              { id: 'hard', name: difficultyLabel.hard },
+              { id: 'medium', name: difficultyLabel.medium },
+              { id: 'easy', name: difficultyLabel.easy }
+            ]}
+            value={draft.difficulty}
+            onChange={(val) => onDraftChange({ ...draft, difficulty: val as Difficulty })}
+          />
           <TextArea label="备注" value={draft.note} onChange={(note) => onDraftChange({ ...draft, note })} />
           <TextArea label="启发" value={draft.inspiration} onChange={(inspiration) => onDraftChange({ ...draft, inspiration })} />
         </div>
@@ -1161,12 +1161,6 @@ function GalleryView({
 }
 
 // ===== 以下组件保持原样 =====
-// ImagePickerPanel, AnswerField, PreviewGrid, SourceInput, CalendarView, SettingsView, SettingsAccordion, ReviewPreview, TaxonomyEditor, MistakeCard, ImageStrip, SectionHeading, EmptyState, TextInput, TextArea, ChoiceInput, SelectInput, MiniSelect, ImageLightbox, MotionTapButton, parseIntervals
-
-// 这些组件已在之前的版本中完整定义，此处为节省篇幅省略，实际使用时可从原文件中复制。
-// 但为了确保完整，我会在下面补全所有组件（由于对话长度限制，我将在后续消息中提供剩余部分）。
-// ===== 以下组件保持原样（紧接在 GalleryView 后面） =====
-
 function ImagePickerPanel({
   title,
   images,
@@ -1189,7 +1183,7 @@ function ImagePickerPanel({
       <div className="import-actions">
         <MotionTapButton type="button" onClick={onGallery}>
           <Images size={18} />
-          从相册导入
+          相册
         </MotionTapButton>
         <MotionTapButton type="button" onClick={onCamera}>
           <Camera size={18} />
@@ -1223,7 +1217,7 @@ function AnswerField({
       <div className="answer-image-tools">
         <MotionTapButton type="button" onClick={onGallery}>
           <Images size={18} />
-          从相册导入
+          相册
         </MotionTapButton>
         <MotionTapButton type="button" onClick={onCamera}>
           <Camera size={18} />
