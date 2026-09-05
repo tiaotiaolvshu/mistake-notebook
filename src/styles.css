@@ -1008,19 +1008,6 @@ select:focus option:checked {
   .tab-label {
     display: none;
   }
-
-  /* 导入页平板适配：左右两栏 */
-  .form-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-  .field.full,
-  .primary-action,
-  .import-panel {
-    grid-column: 1 / -1;
-  }
-  .gallery-grid {
-    grid-template-columns: 1fr 1fr;
-  }
 }
 
 @keyframes cardIn {
