@@ -114,7 +114,7 @@ const loadImportDraft = () => {
   }
 };
 
-// ========== 分段控制器（独立 ID，互不干扰，支持换行，平滑跨行滑动） ==========
+// ========== 分段控制器（独立ID，互不干扰） ==========
 function SegmentedControl<T extends string>({
   options,
   value,
@@ -134,8 +134,7 @@ function SegmentedControl<T extends string>({
     height: 0,
   });
   const [isReady, setIsReady] = useState(false);
-  // 生成唯一 ID，每个组件独立
-  const id = useRef(`segmented-slider-${Math.random().toString(36).substring(2, 9)}`);
+  const id = useRef(`seg-${Math.random().toString(36).substring(2, 9)}`);
 
   const updateSlider = () => {
     if (!containerRef.current) return;
@@ -229,7 +228,7 @@ function SegmentedControl<T extends string>({
   );
 }
 
-// ========== 沉浸式复习组件（7:3 布局） ==========
+// ========== 沉浸式复习组件（7:3 布局，修复对齐和题号） ==========
 function ReviewFullscreen({
   dueMistakes,
   imagesByMistake,
@@ -290,6 +289,11 @@ function ReviewFullscreen({
 
   const handleShowAnswer = () => setShowAnswer(true);
 
+  const handleJumpTo = (i: number) => {
+    setIndex(i);
+    setShowAnswer(false);
+  };
+
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 999,
@@ -300,6 +304,7 @@ function ReviewFullscreen({
       padding: '24px',
       overflow: 'hidden'
     }}>
+      {/* 左侧 7 */}
       <div style={{
         display: 'flex',
         flexDirection: 'column',
@@ -374,67 +379,71 @@ function ReviewFullscreen({
           )}
         </div>
 
-        {!showAnswer ? (
-          <motion.button
-            whileTap={{ scale: 0.96 }}
-            onClick={handleShowAnswer}
-            style={{
+        {/* 底部按钮（与右侧对齐） */}
+        <div style={{ minHeight: '52px', display: 'flex', alignItems: 'center' }}>
+          {!showAnswer ? (
+            <motion.button
+              whileTap={{ scale: 0.96 }}
+              onClick={handleShowAnswer}
+              style={{
+                width: '100%',
+                padding: '12px',
+                borderRadius: '40px',
+                border: '1px solid rgba(255,255,255,0.3)',
+                background: 'rgba(61,90,139,0.15)',
+                backdropFilter: 'blur(8px)',
+                color: 'var(--primary)',
+                fontSize: '1rem',
+                fontWeight: '600',
+                cursor: 'pointer',
+                transition: 'background 0.2s'
+              }}
+            >
+              📖 显示答案
+            </motion.button>
+          ) : (
+            <div style={{
+              display: 'flex',
+              justifyContent: 'center',
+              gap: '12px',
+              flexWrap: 'wrap',
               width: '100%',
-              padding: '12px',
-              borderRadius: '40px',
-              border: '1px solid rgba(255,255,255,0.3)',
-              background: 'rgba(61,90,139,0.15)',
-              backdropFilter: 'blur(8px)',
-              color: 'var(--primary)',
-              fontSize: '1rem',
-              fontWeight: '600',
-              cursor: 'pointer',
-              transition: 'background 0.2s'
-            }}
-          >
-            📖 显示答案
-          </motion.button>
-        ) : (
-          <div style={{
-            display: 'flex',
-            justifyContent: 'center',
-            gap: '12px',
-            flexWrap: 'wrap',
-            paddingTop: '8px',
-            borderTop: '1px solid rgba(200,212,226,0.2)'
-          }}>
-            {(['forgot', 'struggled', 'remembered', 'mastered'] as ReviewResult[]).map((r) => (
-              <motion.button
-                key={r}
-                whileTap={{ scale: 0.94 }}
-                onClick={() => handleReview(r)}
-                style={{
-                  flex: '1 1 20%',
-                  minWidth: '70px',
-                  padding: '10px 0',
-                  borderRadius: '30px',
-                  border: '1px solid rgba(255,255,255,0.3)',
-                  background: {
-                    forgot: 'rgba(196,90,106,0.7)',
-                    struggled: 'rgba(201,146,58,0.7)',
-                    remembered: 'rgba(58,140,122,0.7)',
-                    mastered: 'rgba(61,90,139,0.7)'
-                  }[r],
-                  backdropFilter: 'blur(10px)',
-                  color: 'white',
-                  fontSize: '0.9rem',
-                  fontWeight: '600',
-                  cursor: 'pointer'
-                }}
-              >
-                {reviewResultLabel[r]}
-              </motion.button>
-            ))}
-          </div>
-        )}
+              paddingTop: '4px',
+              borderTop: '1px solid rgba(200,212,226,0.2)'
+            }}>
+              {(['forgot', 'struggled', 'remembered', 'mastered'] as ReviewResult[]).map((r) => (
+                <motion.button
+                  key={r}
+                  whileTap={{ scale: 0.94 }}
+                  onClick={() => handleReview(r)}
+                  style={{
+                    flex: '1 1 20%',
+                    minWidth: '70px',
+                    padding: '10px 0',
+                    borderRadius: '30px',
+                    border: '1px solid rgba(255,255,255,0.3)',
+                    background: {
+                      forgot: 'rgba(196,90,106,0.7)',
+                      struggled: 'rgba(201,146,58,0.7)',
+                      remembered: 'rgba(58,140,122,0.7)',
+                      mastered: 'rgba(61,90,139,0.7)'
+                    }[r],
+                    backdropFilter: 'blur(10px)',
+                    color: 'white',
+                    fontSize: '0.9rem',
+                    fontWeight: '600',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {reviewResultLabel[r]}
+                </motion.button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* 右侧 3：题号 + 退出 */}
+      {/* 右侧 3：题号 + 退出按钮（底部对齐） */}
       <div style={{
         display: 'flex',
         flexDirection: 'column',
@@ -463,27 +472,28 @@ function ReviewFullscreen({
                 <motion.button
                   key={i}
                   whileTap={{ scale: 0.9 }}
-                  onClick={() => { setIndex(i); setShowAnswer(false); }}
+                  onClick={() => handleJumpTo(i)}
                   style={{
-                    width: '32px',
-                    height: '32px',
+                    width: '36px',
+                    height: '36px',
                     borderRadius: '50%',
                     border: isActive ? '2px solid var(--primary)' : '2px solid #6b7a8f',
-                    background: isAnswered ? 'rgba(58,140,122,0.25)' : 'rgba(255,255,255,0.1)',
+                    background: isActive ? 'rgba(61,90,139,0.25)' : (isAnswered ? 'rgba(58,140,122,0.2)' : 'rgba(255,255,255,0.1)'),
                     backdropFilter: 'blur(4px)',
                     color: isActive ? 'var(--primary)' : 'var(--text)',
                     fontWeight: isActive ? '700' : '400',
-                    fontSize: '0.8rem',
+                    fontSize: '0.85rem',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     transition: 'all 0.2s',
-                    position: 'relative'
+                    position: 'relative',
+                    flex: '0 0 36px'
                   }}
                 >
                   {i+1}
-                  {isAnswered && (
+                  {isAnswered && !isActive && (
                     <span style={{
                       position: 'absolute',
                       top: '-4px',
@@ -520,7 +530,8 @@ function ReviewFullscreen({
             fontSize: '0.9rem',
             fontWeight: '600',
             cursor: 'pointer',
-            transition: 'background 0.2s'
+            transition: 'background 0.2s',
+            minHeight: '52px'
           }}
         >
           退出复习
@@ -782,7 +793,7 @@ function App() {
   );
 }
 
-// ===== TabButton（平板侧边栏高亮带弹簧动画） =====
+// ===== TabButton（优化性能，减少卡顿） =====
 function TabButton({ active, icon, label, onClick }: { active: boolean; icon: JSX.Element; label: string; onClick: () => void }) {
   const reducedMotion = useReducedMotion();
   return (
@@ -792,12 +803,14 @@ function TabButton({ active, icon, label, onClick }: { active: boolean; icon: JS
       type="button"
       aria-label={label}
       whileTap={reducedMotion ? undefined : { scale: 0.98 }}
+      style={{ willChange: 'transform' }}
     >
       {active && (
         <motion.span
           className="tab-highlight"
           layoutId="tab-highlight"
-          transition={reducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 400, damping: 25 }}
+          transition={reducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 300, damping: 25 }}
+          style={{ willChange: 'transform, opacity' }}
         />
       )}
       <span className="tab-icon">{icon}</span>
@@ -842,7 +855,7 @@ function TodayView({
   );
 }
 
-// ===== ImportView（7:3 布局，所有分段控制器独立） =====
+// ===== ImportView（7:3 布局） =====
 function ImportView({
   settings,
   taxonomiesByType,
@@ -1161,11 +1174,7 @@ function GalleryView({
   );
 }
 
-// ===== 以下组件保持原样 =====
-// 由于篇幅，后续组件与之前相同，此处为节省空间仅保留占位，实际需完整复制。
-// 但为了确保你直接可用，我已将完整代码包含在最终输出中。由于对话长度，我将把剩余组件放在下一个回复中。
-// ===== 以下组件紧接在 GalleryView 后面 =====
-
+// ===== 以下组件保持不变 =====
 function ImagePickerPanel({
   title,
   images,
