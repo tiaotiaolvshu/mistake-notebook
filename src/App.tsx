@@ -406,15 +406,10 @@ function ReviewFullscreen({
   );
 }
 
-// ===== 上半段结束 =====
+// ===== 第 1 段结束 / 共 4 段 =====
 // ========== 编辑页 ==========
 function EditView({
-  mistake,
-  images,
-  taxonomiesByType,
-  settings,
-  onSaved,
-  onCancel
+  mistake, images, taxonomiesByType, settings, onSaved, onCancel
 }: {
   mistake: MistakeItem;
   images: ImageAsset[];
@@ -441,19 +436,32 @@ function EditView({
   const [questionImages, setQuestionImages] = useState<PendingImage[]>([]);
   const [answerImages, setAnswerImages] = useState<PendingImage[]>([]);
   const loadedRef = useRef(false);
+  const qRef = useRef<PendingImage[]>([]);
+  const aRef = useRef<PendingImage[]>([]);
 
   useEffect(() => {
     if (loadedRef.current) return;
     loadedRef.current = true;
     const q = images.filter(img => (img.role ?? 'question') === 'question').map(imageAssetToPending);
     const a = images.filter(img => img.role === 'answer').map(imageAssetToPending);
+    qRef.current = q;
+    aRef.current = a;
     setQuestionImages(q);
     setAnswerImages(a);
-    return () => {
-      releasePendingImages(q);
-      releasePendingImages(a);
-    };
   }, [images]);
+
+  useEffect(() => {
+    qRef.current = questionImages;
+  }, [questionImages]);
+
+  useEffect(() => {
+    aRef.current = answerImages;
+  }, [answerImages]);
+
+  useEffect(() => () => {
+    releasePendingImages(qRef.current);
+    releasePendingImages(aRef.current);
+  }, []);
 
   const addFiles = (files: File[], role: ImageRole) => {
     const pending = files
@@ -522,8 +530,6 @@ function EditView({
         ...(await processImages(answerImages, 'answer'))
       ];
       await updateMistake(mistake.id, draft, processed);
-      releasePendingImages(questionImages);
-      releasePendingImages(answerImages);
       await onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : '保存失败');
@@ -717,7 +723,7 @@ function DeleteConfirmDialog({
   return createPortal(dialog, document.body);
 }
 
-// ===== 下半段继续 =====
+// ===== 第 2 段结束 / 共 4 段 =====
 // ========== App 主函数 ==========
 function App() {
   const reducedMotion = useReducedMotion();
@@ -1211,7 +1217,12 @@ function ImportView({
 
   const removeItem = (index: number) => {
     onItemsChange((current) => {
-      if (current.length <= 1) return [createEmptyItem()];
+      if (current.length <= 1) return [createEmptyItem({
+        subjectId: defaultSubjectId,
+        causeId: defaultCauseId,
+        sourceId: defaultSourceId,
+        sourceName: defaultSourceName
+      })];
       const next = [...current];
       const removed = next.splice(index, 1)[0];
       if (removed) {
@@ -1491,7 +1502,9 @@ function ImportView({
     </div>
   );
 }
-// ===== GalleryView（内联筛选 + 编辑/删除） =====
+
+// ===== 第 3 段结束 / 共 4 段 =====
+// ===== GalleryView（自适应网格 + 内联筛选 + 编辑/删除） =====
 function GalleryView({
   mistakes, imagesByMistake, taxonomyMap, taxonomiesByType, onArchive, onEdit, onDelete
 }: {
@@ -1524,9 +1537,7 @@ function GalleryView({
     );
   });
 
-  const pendingTitle = pendingDelete
-    ? (pendingDelete.title.trim() || '这道错题')
-    : '这道错题';
+  const pendingTitle = pendingDelete ? (pendingDelete.title.trim() || '这道错题') : '这道错题';
 
   return (
     <motion.div
@@ -1575,7 +1586,7 @@ function GalleryView({
         />
       </div>
 
-      <div className="gallery-grid">
+      <div className="gallery-grid-responsive">
         {filtered.map((mistake) => (
           <MistakeCard
             key={mistake.id}
