@@ -47,6 +47,7 @@ export interface ImageAsset {
 
 export interface DraftImageAsset {
   id: string;
+  itemKey: string;
   role: ImageRole;
   imageBlob: Blob;
   fileName: string;
