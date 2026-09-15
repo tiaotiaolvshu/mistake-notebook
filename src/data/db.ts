@@ -172,7 +172,6 @@ export const addMistake = async (draft: MistakeDraft, images: Omit<ImageAsset, '
   return id;
 };
 
-// ===== 更新错题（覆盖，保留 reviewStage / nextReviewAt）=====
 export const updateMistake = async (
   id: string,
   draft: MistakeDraft,
@@ -215,7 +214,6 @@ export const updateMistake = async (
   });
 };
 
-// ===== 删除错题 =====
 export const deleteMistake = async (id: string) => {
   await db.transaction('rw', db.mistakes, db.images, db.reviewLogs, async () => {
     await db.mistakes.delete(id);
