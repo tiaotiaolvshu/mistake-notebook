@@ -94,7 +94,7 @@ h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin: 0; }
 .tab-button svg { width: 20px; height: 20px; }
 .tab-label { line-height: 1.1; }
 
-/* ===== 分段控制器（边框淡） ===== */
+/* ===== 分段控制器 ===== */
 .segmented-wrap {
   position: relative; display: flex; flex-wrap: wrap; gap: 4px;
   background: rgba(255, 255, 255, 0.35);
@@ -326,7 +326,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
   font-size: 12px; font-weight: 600; border: 1px solid rgba(201, 146, 58, 0.3);
 }
 
-/* ===== 导入页（收窄：max-width 720，居中） ===== */
+/* ===== 导入页 ===== */
 .import-carousel-wrap {
   position: relative; overflow: hidden; border-radius: var(--radius-card);
   background: rgba(255, 255, 255, 0.35);
@@ -481,7 +481,6 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
 .review-card-body:active { cursor: grabbing; }
 .review-card-body.with-answer { grid-template-columns: 1fr 1fr; }
 
-/* 关键：加 touch-action: pan-y —— 让横向手势能传上来切题 */
 .review-question-area, .review-answer-area {
   display: flex; flex-direction: column; gap: 12px;
   overflow-y: auto; padding: 4px;
@@ -506,24 +505,72 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
 }
 .review-inspiration b { color: var(--primary); margin-right: 6px; }
 
-.review-action-row { flex: 0 0 60px; display: flex; align-items: stretch; }
+/* ==== 底部按钮区：跟右侧退出按钮对齐，淡描边风格 ==== */
+.review-action-row {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  min-height: 46px;
+}
+
 .review-show-answer-btn {
-  width: 100%; height: 100%;
-  border: 1px solid rgba(61, 90, 139, 0.32); border-radius: 40px;
-  background: rgba(61, 90, 139, 0.15); color: var(--primary);
-  font-size: 1rem; font-weight: 600; cursor: pointer;
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 16px;
+  border: 1px solid rgba(61, 90, 139, 0.4);
+  border-radius: 14px;
+  background: rgba(61, 90, 139, 0.08);
+  color: var(--primary);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
 }
-.review-show-answer-btn:active { transform: scale(0.98); }
-.review-result-row { display: flex; gap: 8px; width: 100%; height: 100%; }
+.review-show-answer-btn:active { background: rgba(61, 90, 139, 0.16); }
+
+.review-result-row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  min-height: 46px;
+}
 .review-result-btn {
-  flex: 1; height: 100%; border-radius: 30px; border: 1px solid rgba(255, 255, 255, 0.3);
-  color: white; font-size: 0.9rem; font-weight: 600; cursor: pointer;
+  flex: 1;
+  min-height: 46px;
+  padding: 10px 6px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
 }
-.review-result-forgot { background: rgba(196, 90, 106, 0.85); }
-.review-result-struggled { background: rgba(201, 146, 58, 0.85); }
-.review-result-remembered { background: rgba(58, 140, 122, 0.85); }
-.review-result-mastered { background: rgba(61, 90, 139, 0.85); }
-.review-result-btn:active { transform: scale(0.95); }
+.review-result-forgot {
+  color: var(--danger);
+  border-color: rgba(196, 90, 106, 0.42);
+  background: rgba(196, 90, 106, 0.08);
+}
+.review-result-forgot:active { background: rgba(196, 90, 106, 0.16); }
+.review-result-struggled {
+  color: var(--warning);
+  border-color: rgba(201, 146, 58, 0.42);
+  background: rgba(201, 146, 58, 0.08);
+}
+.review-result-struggled:active { background: rgba(201, 146, 58, 0.16); }
+.review-result-remembered {
+  color: var(--success);
+  border-color: rgba(58, 140, 122, 0.42);
+  background: rgba(58, 140, 122, 0.08);
+}
+.review-result-remembered:active { background: rgba(58, 140, 122, 0.16); }
+.review-result-mastered {
+  color: var(--primary);
+  border-color: rgba(61, 90, 139, 0.42);
+  background: rgba(61, 90, 139, 0.08);
+}
+.review-result-mastered:active { background: rgba(61, 90, 139, 0.16); }
 
 /* 右侧 2 */
 .review-right {
@@ -534,7 +581,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
   -webkit-backdrop-filter: blur(20px) saturate(1.2);
   border-radius: 24px;
   border: 1px solid rgba(255, 255, 255, 0.6);
-  padding: 16px;
+  padding: 20px;
   overflow: hidden;
 }
 .review-right-body {
@@ -598,14 +645,21 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
 .review-page-arrow:disabled { opacity: 0.35; cursor: not-allowed; }
 .review-page-indicator { font-size: 12px; color: var(--muted); font-weight: 600; text-align: center; flex: 1; }
 
+/* 退出按钮：跟左侧按钮组高度对齐 */
 .review-exit-btn {
   flex: 0 0 auto;
-  padding: 12px 12px; border-radius: 14px;
-  border: 1px solid rgba(196, 90, 106, 0.4);
-  background: rgba(196, 90, 106, 0.10); color: var(--danger);
-  font-size: 13px; font-weight: 600; cursor: pointer;
+  min-height: 46px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(196, 90, 106, 0.42);
+  background: rgba(196, 90, 106, 0.08);
+  color: var(--danger);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
 }
-.review-exit-btn:active { transform: scale(0.98); }
+.review-exit-btn:active { background: rgba(196, 90, 106, 0.16); }
 
 .review-empty {
   position: fixed; inset: 0; display: grid; place-items: center; gap: 12px;
