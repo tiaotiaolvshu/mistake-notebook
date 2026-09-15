@@ -228,7 +228,7 @@ function SegmentedControl<T extends string>({
   );
 }
 
-// ========== 沉浸式复习组件（7:3 布局，修复对齐和题号） ==========
+// ========== 沉浸式复习组件（7:3 布局，按钮完全对齐） ==========
 function ReviewFullscreen({
   dueMistakes,
   imagesByMistake,
@@ -294,6 +294,25 @@ function ReviewFullscreen({
     setShowAnswer(false);
   };
 
+  // ===== 统一按钮基础样式：两个按钮完全一致 =====
+  const ACTION_ROW_HEIGHT = 56;
+  const actionBtnBase = {
+    width: '100%',
+    height: '100%',
+    border: '1px solid rgba(255,255,255,0.3)',
+    borderRadius: '40px',
+    backdropFilter: 'blur(8px)',
+    WebkitBackdropFilter: 'blur(8px)',
+    fontSize: '1rem',
+    fontWeight: '600',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'background 0.2s',
+    lineHeight: 1
+  } as const;
+
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 999,
@@ -317,6 +336,7 @@ function ReviewFullscreen({
         height: '100%',
         overflow: 'hidden'
       }}>
+        {/* 内容区（自适应，滚动在这里） */}
         <div style={{
           display: 'grid',
           gridTemplateColumns: showAnswer ? '1fr 1fr' : '1fr',
@@ -379,24 +399,21 @@ function ReviewFullscreen({
           )}
         </div>
 
-        {/* 底部按钮（与右侧对齐） */}
-        <div style={{ minHeight: '52px', display: 'flex', alignItems: 'center' }}>
+        {/* 底部按钮区：固定高度，和右侧完全对齐 */}
+        <div style={{
+          flex: `0 0 ${ACTION_ROW_HEIGHT}px`,
+          display: 'flex',
+          alignItems: 'stretch',
+          width: '100%'
+        }}>
           {!showAnswer ? (
             <motion.button
               whileTap={{ scale: 0.96 }}
               onClick={handleShowAnswer}
               style={{
-                width: '100%',
-                padding: '12px',
-                borderRadius: '40px',
-                border: '1px solid rgba(255,255,255,0.3)',
+                ...actionBtnBase,
                 background: 'rgba(61,90,139,0.15)',
-                backdropFilter: 'blur(8px)',
-                color: 'var(--primary)',
-                fontSize: '1rem',
-                fontWeight: '600',
-                cursor: 'pointer',
-                transition: 'background 0.2s'
+                color: 'var(--primary)'
               }}
             >
               📖 显示答案
@@ -404,12 +421,9 @@ function ReviewFullscreen({
           ) : (
             <div style={{
               display: 'flex',
-              justifyContent: 'center',
-              gap: '12px',
-              flexWrap: 'wrap',
+              gap: '8px',
               width: '100%',
-              paddingTop: '4px',
-              borderTop: '1px solid rgba(200,212,226,0.2)'
+              height: '100%'
             }}>
               {(['forgot', 'struggled', 'remembered', 'mastered'] as ReviewResult[]).map((r) => (
                 <motion.button
@@ -417,9 +431,8 @@ function ReviewFullscreen({
                   whileTap={{ scale: 0.94 }}
                   onClick={() => handleReview(r)}
                   style={{
-                    flex: '1 1 20%',
-                    minWidth: '70px',
-                    padding: '10px 0',
+                    flex: 1,
+                    height: '100%',
                     borderRadius: '30px',
                     border: '1px solid rgba(255,255,255,0.3)',
                     background: {
@@ -443,21 +456,21 @@ function ReviewFullscreen({
         </div>
       </div>
 
-      {/* 右侧 3：题号 + 退出按钮（底部对齐） */}
+      {/* 右侧 3 */}
       <div style={{
         display: 'flex',
         flexDirection: 'column',
-        gap: '12px',
+        gap: '16px',
         background: 'rgba(255,255,255,0.3)',
         backdropFilter: 'blur(16px)',
         borderRadius: '24px',
-        padding: '20px 16px 16px 16px',
+        padding: '24px',
         border: '1px solid rgba(255,255,255,0.2)',
         height: '100%',
-        overflow: 'hidden',
-        justifyContent: 'space-between'
+        overflow: 'hidden'
       }}>
-        <div style={{ overflow: 'auto' }}>
+        {/* 题号区（自适应滚动） */}
+        <div style={{ flex: '1 1 auto', minHeight: 0, overflow: 'auto' }}>
           <h3 style={{ margin: '0 0 12px 0', fontSize: '1rem', fontWeight: '600', color: 'var(--text)' }}>题号</h3>
           <div style={{
             display: 'flex',
@@ -492,7 +505,7 @@ function ReviewFullscreen({
                     flex: '0 0 36px'
                   }}
                 >
-                  {i+1}
+                  {i + 1}
                   {isAnswered && !isActive && (
                     <span style={{
                       position: 'absolute',
@@ -516,31 +529,30 @@ function ReviewFullscreen({
             })}
           </div>
         </div>
-        <motion.button
-          whileTap={{ scale: 0.96 }}
-          onClick={onBack}
-          style={{
-            width: '100%',
-            padding: '10px 0',
-            borderRadius: '40px',
-            border: '1px solid rgba(255,255,255,0.3)',
-            background: 'rgba(196,90,106,0.15)',
-            backdropFilter: 'blur(8px)',
-            color: '#c45a6a',
-            fontSize: '0.9rem',
-            fontWeight: '600',
-            cursor: 'pointer',
-            transition: 'background 0.2s',
-            minHeight: '52px'
-          }}
-        >
-          退出复习
-        </motion.button>
+
+        {/* 底部按钮区：和左侧同高、同宽逻辑、同圆角 */}
+        <div style={{
+          flex: `0 0 ${ACTION_ROW_HEIGHT}px`,
+          display: 'flex',
+          alignItems: 'stretch',
+          width: '100%'
+        }}>
+          <motion.button
+            whileTap={{ scale: 0.96 }}
+            onClick={onBack}
+            style={{
+              ...actionBtnBase,
+              background: 'rgba(196,90,106,0.15)',
+              color: '#c45a6a'
+            }}
+          >
+            退出复习
+          </motion.button>
+        </div>
       </div>
     </div>
   );
 }
-
 // ========== App 主函数 ==========
 function App() {
   const reducedMotion = useReducedMotion();
@@ -728,7 +740,6 @@ function App() {
                 onAnswerImagesChange={setAnswerImages}
                 onSaved={async () => {
                   await refresh();
-                  setActiveTab('gallery');
                   setToast('已存入错题本');
                 }}
               />
@@ -792,7 +803,6 @@ function App() {
     </div>
   );
 }
-
 // ===== TabButton（优化性能，减少卡顿） =====
 function TabButton({ active, icon, label, onClick }: { active: boolean; icon: JSX.Element; label: string; onClick: () => void }) {
   const reducedMotion = useReducedMotion();
@@ -1090,8 +1100,7 @@ function ImportView({
     </motion.div>
   );
 }
-
-// ===== GalleryView（5:5 两列） =====
+// ===== GalleryView（5:5 两列，内联筛选 + 滑块回弹） =====
 function GalleryView({
   mistakes,
   imagesByMistake,
@@ -1109,10 +1118,11 @@ function GalleryView({
   const [subjectId, setSubjectId] = useState('');
   const [causeId, setCauseId] = useState('');
   const [difficulty, setDifficulty] = useState('');
-  const difficultyOptions = [
-    { id: '', name: '全部难度' },
-    ...(['hard', 'medium', 'easy'] as Difficulty[]).map((item) => ({ id: item, name: difficultyLabel[item] }))
-  ];
+
+  const difficultyOptions = (['hard', 'medium', 'easy'] as Difficulty[]).map((item) => ({
+    id: item,
+    name: difficultyLabel[item]
+  }));
 
   const filtered = mistakes.filter((mistake) => {
     const text = `${mistake.title} ${mistake.note} ${mistake.answer} ${mistake.inspiration} ${mistake.sourceName}`.toLowerCase();
@@ -1142,15 +1152,40 @@ function GalleryView({
       }}
     >
       <SectionHeading title="错题画廊" meta={`${filtered.length} 道`} />
+
       <div className="search-box">
         <Search size={18} />
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索标题、备注、题源、答案、启发" />
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="搜索标题、备注、题源、答案、启发"
+        />
       </div>
-      <div className="filter-row">
-        <MiniSelect value={subjectId} options={taxonomiesByType.subject} placeholder="全部科目" onChange={setSubjectId} />
-        <MiniSelect value={causeId} options={taxonomiesByType.cause} placeholder="全部错因" onChange={setCauseId} />
-        <ChoiceInput value={difficulty} options={difficultyOptions} placeholder="全部难度" onChange={setDifficulty} />
+
+      <div className="filter-groups">
+        <InlineFilterGroup
+          groupKey="subject"
+          allLabel="全部科目"
+          options={taxonomiesByType.subject}
+          value={subjectId}
+          onChange={setSubjectId}
+        />
+        <InlineFilterGroup
+          groupKey="cause"
+          allLabel="全部错因"
+          options={taxonomiesByType.cause}
+          value={causeId}
+          onChange={setCauseId}
+        />
+        <InlineFilterGroup
+          groupKey="difficulty"
+          allLabel="全部难度"
+          options={difficultyOptions}
+          value={difficulty}
+          onChange={setDifficulty}
+        />
       </div>
+
       <div style={{
         display: 'grid',
         gridTemplateColumns: '1fr 1fr',
@@ -1169,11 +1204,63 @@ function GalleryView({
           />
         ))}
       </div>
+
       {filtered.length === 0 && <EmptyState icon={<MoreHorizontal />} title="没找到" text="换个筛选试试。" />}
     </motion.div>
   );
 }
 
+// 内联筛选组：选中项背后有会滑动 + 伸缩 + 回弹的高亮块
+function InlineFilterGroup({
+  groupKey,
+  allLabel,
+  options,
+  value,
+  onChange
+}: {
+  groupKey: string;
+  allLabel: string;
+  options: { id: string; name: string }[];
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  // 回弹弹簧参数：damping 小 = 回弹明显；stiffness 大 = 速度快
+  const pillTransition = {
+    type: 'spring' as const,
+    stiffness: 520,
+    damping: 24,
+    mass: 0.7,
+    restDelta: 0.001
+  };
+
+  const renderChip = (id: string, label: string) => {
+    const selected = value === id;
+    return (
+      <button
+        key={id || '__all__'}
+        type="button"
+        className={`inline-filter-chip ${selected ? 'selected' : ''}`}
+        onClick={() => onChange(id)}
+      >
+        {selected && (
+          <motion.span
+            layoutId={`filter-pill-${groupKey}`}
+            className="inline-filter-pill"
+            transition={pillTransition}
+          />
+        )}
+        <span className="inline-filter-label">{label}</span>
+      </button>
+    );
+  };
+
+  return (
+    <div className="inline-filter-group">
+      {renderChip('', allLabel)}
+      {options.map((opt) => renderChip(opt.id, opt.name))}
+    </div>
+  );
+}
 // ===== 以下组件保持不变 =====
 function ImagePickerPanel({
   title,
