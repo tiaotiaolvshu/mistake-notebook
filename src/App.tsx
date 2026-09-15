@@ -11,7 +11,6 @@ import {
   ChevronDown,
   Database,
   Download,
-  GraduationCap,
   ImagePlus,
   Images,
   MoreHorizontal,
@@ -22,6 +21,7 @@ import {
   SlidersHorizontal,
   Tags,
   Trash2,
+  X,
 } from 'lucide-react';
 import {
   addMistake,
@@ -60,6 +60,13 @@ interface PendingImage {
   url: string;
 }
 
+interface ImportItem {
+  itemKey: string;
+  draft: MistakeDraft;
+  questionImages: PendingImage[];
+  answerImages: PendingImage[];
+}
+
 const taxonomyTitles: Record<TaxonomyType, string> = {
   subject: '科目',
   cause: '错因',
@@ -78,17 +85,28 @@ const emptyDraft: MistakeDraft = {
   difficulty: 'medium'
 };
 
+const newItemKey = () => `item-${crypto.randomUUID()}`;
+
+const createEmptyItem = (): ImportItem => ({
+  itemKey: newItemKey(),
+  draft: { ...emptyDraft },
+  questionImages: [],
+  answerImages: []
+});
+
 const springSoft = { duration: 0.08, ease: 'easeOut' } as const;
 const springSnappy = { duration: 0.08, ease: 'easeOut' } as const;
 const fadeSlide = { duration: 0.06, ease: 'easeOut' } as const;
-const IMPORT_DRAFT_KEY = 'cuotiben.importDraft.v1';
+const IMPORT_ITEMS_KEY = 'cuotiben.importItems.v2';
+const IMPORT_LEGACY_DRAFT_KEY = 'cuotiben.importDraft.v1';
 
 const releasePendingImages = (list: PendingImage[]) => {
   list.forEach((image) => URL.revokeObjectURL(image.url));
 };
 
-const pendingToDraftAsset = (image: PendingImage, role: ImageRole): DraftImageAsset => ({
+const pendingToDraftAsset = (image: PendingImage, role: ImageRole, itemKey: string): DraftImageAsset => ({
   id: image.id,
+  itemKey,
   role,
   imageBlob: image.file,
   fileName: image.file.name,
@@ -98,23 +116,35 @@ const pendingToDraftAsset = (image: PendingImage, role: ImageRole): DraftImageAs
 
 const draftAssetToPending = (asset: DraftImageAsset): PendingImage => {
   const file = new File([asset.imageBlob], asset.fileName, { type: asset.mimeType || asset.imageBlob.type || 'image/jpeg' });
-  return {
-    id: asset.id,
-    file,
-    url: URL.createObjectURL(file)
-  };
+  return { id: asset.id, file, url: URL.createObjectURL(file) };
 };
 
-const loadImportDraft = () => {
+const loadImportItems = (): ImportItem[] => {
   try {
-    const saved = window.localStorage.getItem(IMPORT_DRAFT_KEY);
-    return saved ? { ...emptyDraft, ...JSON.parse(saved) } as MistakeDraft : emptyDraft;
+    const saved = window.localStorage.getItem(IMPORT_ITEMS_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved) as ImportItem[];
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map((item) => ({
+          itemKey: item.itemKey || newItemKey(),
+          draft: { ...emptyDraft, ...item.draft },
+          questionImages: [],
+          answerImages: []
+        }));
+      }
+    }
+    const legacy = window.localStorage.getItem(IMPORT_LEGACY_DRAFT_KEY);
+    if (legacy) {
+      const draft = JSON.parse(legacy) as MistakeDraft;
+      return [{ itemKey: newItemKey(), draft: { ...emptyDraft, ...draft }, questionImages: [], answerImages: [] }];
+    }
   } catch {
-    return emptyDraft;
+    // ignore
   }
+  return [createEmptyItem()];
 };
 
-// ========== 分段控制器（独立ID，互不干扰） ==========
+// ========== 分段控制器 ==========
 function SegmentedControl<T extends string>({
   options,
   value,
@@ -127,12 +157,7 @@ function SegmentedControl<T extends string>({
   label?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [sliderStyle, setSliderStyle] = useState<{ left: number; top: number; width: number; height: number }>({
-    left: 0,
-    top: 0,
-    width: 0,
-    height: 0,
-  });
+  const [sliderStyle, setSliderStyle] = useState({ left: 0, top: 0, width: 0, height: 0 });
   const [isReady, setIsReady] = useState(false);
   const id = useRef(`seg-${Math.random().toString(36).substring(2, 9)}`);
 
@@ -162,78 +187,44 @@ function SegmentedControl<T extends string>({
     };
   }, [value, options]);
 
-  useEffect(() => {
-    updateSlider();
-  }, [options]);
+  useEffect(() => { updateSlider(); }, [options]);
 
   return (
     <div className="field" style={{ gap: '4px' }}>
       {label && <span>{label}</span>}
-      <div
-        ref={containerRef}
-        style={{
-          position: 'relative',
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: '4px',
-          background: 'rgba(255,255,255,0.15)',
-          borderRadius: 'var(--radius-control)',
-          padding: '4px',
-          minHeight: '44px',
-          border: '1px solid rgba(255,255,255,0.1)',
-        }}
-      >
+      <div ref={containerRef} style={{
+        position: 'relative', display: 'flex', flexWrap: 'wrap', gap: '4px',
+        background: 'rgba(255,255,255,0.15)', borderRadius: 'var(--radius-control)',
+        padding: '4px', minHeight: '44px', border: '1px solid rgba(255,255,255,0.1)',
+      }}>
         {isReady && (
           <motion.div
             layoutId={id.current}
             transition={{ type: 'spring', stiffness: 500, damping: 30 }}
             style={{
-              position: 'absolute',
-              background: 'rgba(61,90,139,0.2)',
-              backdropFilter: 'blur(4px)',
-              borderRadius: 'calc(var(--radius-control) - 4px)',
-              border: '1px solid rgba(255,255,255,0.2)',
-              pointerEvents: 'none',
-              ...sliderStyle,
+              position: 'absolute', background: 'rgba(61,90,139,0.2)',
+              backdropFilter: 'blur(4px)', borderRadius: 'calc(var(--radius-control) - 4px)',
+              border: '1px solid rgba(255,255,255,0.2)', pointerEvents: 'none', ...sliderStyle,
             }}
           />
         )}
         {options.map((opt) => (
-          <button
-            key={opt.id}
-            className="segmented-option"
-            onClick={() => onChange(opt.id)}
-            style={{
-              flex: '1 0 auto',
-              minWidth: '60px',
-              padding: '6px 12px',
-              borderRadius: 'calc(var(--radius-control) - 4px)',
-              border: 'none',
-              background: 'transparent',
-              color: value === opt.id ? 'var(--primary)' : 'var(--muted)',
-              fontWeight: value === opt.id ? '600' : '400',
-              fontSize: '0.9rem',
-              cursor: 'pointer',
-              position: 'relative',
-              zIndex: 1,
-              transition: 'color 0.2s',
-              textAlign: 'center',
-            }}
-          >
-            {opt.name}
-          </button>
+          <button key={opt.id} className="segmented-option" onClick={() => onChange(opt.id)} style={{
+            flex: '1 0 auto', minWidth: '60px', padding: '6px 12px',
+            borderRadius: 'calc(var(--radius-control) - 4px)', border: 'none', background: 'transparent',
+            color: value === opt.id ? 'var(--primary)' : 'var(--muted)',
+            fontWeight: value === opt.id ? '600' : '400', fontSize: '0.9rem',
+            cursor: 'pointer', position: 'relative', zIndex: 1, transition: 'color 0.2s', textAlign: 'center',
+          }}>{opt.name}</button>
         ))}
       </div>
     </div>
   );
 }
 
-// ========== 沉浸式复习组件（7:3 布局，按钮完全对齐） ==========
+// ========== 沉浸式复习 ==========
 function ReviewFullscreen({
-  dueMistakes,
-  imagesByMistake,
-  onReviewed,
-  onBack
+  dueMistakes, imagesByMistake, onReviewed, onBack
 }: {
   dueMistakes: MistakeItem[];
   imagesByMistake: Map<string, ImageAsset[]>;
@@ -245,10 +236,7 @@ function ReviewFullscreen({
   const [answeredState, setAnsweredState] = useState<boolean[]>(() => new Array(dueMistakes.length).fill(false));
   const total = dueMistakes.length;
 
-  if (total === 0) {
-    onBack();
-    return null;
-  }
+  if (total === 0) { onBack(); return null; }
 
   const mistake = dueMistakes[index];
   const images = imagesByMistake.get(mistake.id) || [];
@@ -267,285 +255,141 @@ function ReviewFullscreen({
 
   const handleReview = async (result: ReviewResult) => {
     await onReviewed(mistake, result);
-    const newAnswered = [...answeredState];
-    newAnswered[index] = true;
-    setAnsweredState(newAnswered);
+    const next = [...answeredState];
+    next[index] = true;
+    setAnsweredState(next);
     setShowAnswer(false);
-
-    const allAnswered = newAnswered.every(v => v === true);
-    if (allAnswered) {
-      onBack();
-      return;
-    }
-
-    let nextIndex = index + 1;
-    if (nextIndex >= total) nextIndex = 0;
-    setIndex(nextIndex);
+    if (next.every(v => v === true)) { onBack(); return; }
+    let ni = index + 1;
+    if (ni >= total) ni = 0;
+    setIndex(ni);
   };
 
-  useEffect(() => {
-    setShowAnswer(false);
-  }, [index]);
+  useEffect(() => { setShowAnswer(false); }, [index]);
 
-  const handleShowAnswer = () => setShowAnswer(true);
-
-  const handleJumpTo = (i: number) => {
-    setIndex(i);
-    setShowAnswer(false);
-  };
-
-  // ===== 统一按钮基础样式：两个按钮完全一致 =====
   const ACTION_ROW_HEIGHT = 56;
   const actionBtnBase = {
-    width: '100%',
-    height: '100%',
-    border: '1px solid rgba(255,255,255,0.3)',
-    borderRadius: '40px',
-    backdropFilter: 'blur(8px)',
-    WebkitBackdropFilter: 'blur(8px)',
-    fontSize: '1rem',
-    fontWeight: '600',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    transition: 'background 0.2s',
-    lineHeight: 1
+    width: '100%', height: '100%',
+    border: '1px solid rgba(255,255,255,0.3)', borderRadius: '40px',
+    backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+    fontSize: '1rem', fontWeight: '600', cursor: 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    transition: 'background 0.2s', lineHeight: 1
   } as const;
 
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 999,
       background: 'linear-gradient(145deg, #eef2f7, #f7fafc)',
-      display: 'grid',
-      gridTemplateColumns: '7fr 3fr',
-      gap: '20px',
-      padding: '24px',
-      overflow: 'hidden'
+      display: 'grid', gridTemplateColumns: '7fr 3fr', gap: '20px', padding: '24px', overflow: 'hidden'
     }}>
-      {/* 左侧 7 */}
       <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '16px',
-        background: 'rgba(255,255,255,0.4)',
-        backdropFilter: 'blur(20px)',
-        borderRadius: '24px',
-        padding: '24px',
-        border: '1px solid rgba(255,255,255,0.3)',
-        height: '100%',
-        overflow: 'hidden'
+        display: 'flex', flexDirection: 'column', gap: '16px',
+        background: 'rgba(255,255,255,0.4)', backdropFilter: 'blur(20px)',
+        borderRadius: '24px', padding: '24px', border: '1px solid rgba(255,255,255,0.3)',
+        height: '100%', overflow: 'hidden'
       }}>
-        {/* 内容区（自适应，滚动在这里） */}
         <div style={{
-          display: 'grid',
-          gridTemplateColumns: showAnswer ? '1fr 1fr' : '1fr',
-          gap: '16px',
-          flex: '1 1 auto',
-          minHeight: 0,
-          overflow: 'hidden'
+          display: 'grid', gridTemplateColumns: showAnswer ? '1fr 1fr' : '1fr',
+          gap: '16px', flex: '1 1 auto', minHeight: 0, overflow: 'hidden'
         }}>
-          {/* 原题 */}
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '12px',
-            overflow: 'auto',
-            padding: '4px'
-          }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', overflow: 'auto', padding: '4px' }}>
             <h2 style={{ fontSize: '1.2rem', margin: 0 }}>题目</h2>
-            <div style={{ fontSize: '1rem', color: '#1a2634' }}>
-              {mistake.title || ''}
-            </div>
+            <div style={{ fontSize: '1rem', color: '#1a2634' }}>{mistake.title || ''}</div>
             {url && (
               <div style={{ display: 'flex', justifyContent: 'center' }}>
                 <img src={url} alt="题目图片" style={{
-                  maxWidth: '100%',
-                  maxHeight: '60vh',
-                  objectFit: 'contain',
-                  borderRadius: '12px',
-                  background: 'rgba(255,255,255,0.2)',
-                  padding: '4px'
+                  maxWidth: '100%', maxHeight: '60vh', objectFit: 'contain',
+                  borderRadius: '12px', background: 'rgba(255,255,255,0.2)', padding: '4px'
                 }} />
               </div>
             )}
             {mistake.note && <div style={{ color: '#6b7a8f', fontSize: '0.9rem' }}>备注：{mistake.note}</div>}
           </div>
-
-          {/* 答案 */}
           {showAnswer && (
             <div style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '12px',
-              overflow: 'auto',
-              padding: '4px',
-              borderLeft: '1px solid rgba(200,212,226,0.3)',
-              paddingLeft: '16px'
+              display: 'flex', flexDirection: 'column', gap: '12px', overflow: 'auto',
+              padding: '4px', borderLeft: '1px solid rgba(200,212,226,0.3)', paddingLeft: '16px'
             }}>
               <h2 style={{ fontSize: '1.2rem', margin: 0 }}>答案</h2>
               {answerImages.length > 0 ? (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                   {answerImages.map((img, idx) => (
-                    <img key={idx} src={URL.createObjectURL(img.imageBlob)} alt={`答案图${idx+1}`} style={{ maxWidth: '100%', maxHeight: '150px', objectFit: 'contain', borderRadius: '8px' }} />
+                    <img key={idx} src={URL.createObjectURL(img.imageBlob)} alt={`答案图${idx + 1}`} style={{ maxWidth: '100%', maxHeight: '150px', objectFit: 'contain', borderRadius: '8px' }} />
                   ))}
                 </div>
               ) : (
-                <div style={{ fontSize: '1rem', whiteSpace: 'pre-wrap' }}>
-                  {mistake.answer || '暂无答案，请自行查找'}
-                </div>
+                <div style={{ fontSize: '1rem', whiteSpace: 'pre-wrap' }}>{mistake.answer || '暂无答案，请自行查找'}</div>
               )}
             </div>
           )}
         </div>
-
-        {/* 底部按钮区：固定高度，和右侧完全对齐 */}
-        <div style={{
-          flex: `0 0 ${ACTION_ROW_HEIGHT}px`,
-          display: 'flex',
-          alignItems: 'stretch',
-          width: '100%'
-        }}>
+        <div style={{ flex: `0 0 ${ACTION_ROW_HEIGHT}px`, display: 'flex', alignItems: 'stretch', width: '100%' }}>
           {!showAnswer ? (
-            <motion.button
-              whileTap={{ scale: 0.96 }}
-              onClick={handleShowAnswer}
-              style={{
-                ...actionBtnBase,
-                background: 'rgba(61,90,139,0.15)',
-                color: 'var(--primary)'
-              }}
-            >
+            <motion.button whileTap={{ scale: 0.96 }} onClick={() => setShowAnswer(true)}
+              style={{ ...actionBtnBase, background: 'rgba(61,90,139,0.15)', color: 'var(--primary)' }}>
               📖 显示答案
             </motion.button>
           ) : (
-            <div style={{
-              display: 'flex',
-              gap: '8px',
-              width: '100%',
-              height: '100%'
-            }}>
+            <div style={{ display: 'flex', gap: '8px', width: '100%', height: '100%' }}>
               {(['forgot', 'struggled', 'remembered', 'mastered'] as ReviewResult[]).map((r) => (
-                <motion.button
-                  key={r}
-                  whileTap={{ scale: 0.94 }}
-                  onClick={() => handleReview(r)}
-                  style={{
-                    flex: 1,
-                    height: '100%',
-                    borderRadius: '30px',
-                    border: '1px solid rgba(255,255,255,0.3)',
-                    background: {
-                      forgot: 'rgba(196,90,106,0.7)',
-                      struggled: 'rgba(201,146,58,0.7)',
-                      remembered: 'rgba(58,140,122,0.7)',
-                      mastered: 'rgba(61,90,139,0.7)'
-                    }[r],
-                    backdropFilter: 'blur(10px)',
-                    color: 'white',
-                    fontSize: '0.9rem',
-                    fontWeight: '600',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {reviewResultLabel[r]}
-                </motion.button>
+                <motion.button key={r} whileTap={{ scale: 0.94 }} onClick={() => handleReview(r)} style={{
+                  flex: 1, height: '100%', borderRadius: '30px',
+                  border: '1px solid rgba(255,255,255,0.3)',
+                  background: {
+                    forgot: 'rgba(196,90,106,0.7)', struggled: 'rgba(201,146,58,0.7)',
+                    remembered: 'rgba(58,140,122,0.7)', mastered: 'rgba(61,90,139,0.7)'
+                  }[r],
+                  backdropFilter: 'blur(10px)', color: 'white', fontSize: '0.9rem',
+                  fontWeight: '600', cursor: 'pointer'
+                }}>{reviewResultLabel[r]}</motion.button>
               ))}
             </div>
           )}
         </div>
       </div>
-
-      {/* 右侧 3 */}
       <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '16px',
-        background: 'rgba(255,255,255,0.3)',
-        backdropFilter: 'blur(16px)',
-        borderRadius: '24px',
-        padding: '24px',
-        border: '1px solid rgba(255,255,255,0.2)',
-        height: '100%',
-        overflow: 'hidden'
+        display: 'flex', flexDirection: 'column', gap: '16px',
+        background: 'rgba(255,255,255,0.3)', backdropFilter: 'blur(16px)',
+        borderRadius: '24px', padding: '24px', border: '1px solid rgba(255,255,255,0.2)',
+        height: '100%', overflow: 'hidden'
       }}>
-        {/* 题号区（自适应滚动） */}
         <div style={{ flex: '1 1 auto', minHeight: 0, overflow: 'auto' }}>
           <h3 style={{ margin: '0 0 12px 0', fontSize: '1rem', fontWeight: '600', color: 'var(--text)' }}>题号</h3>
-          <div style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: '8px',
-            justifyContent: 'flex-start'
-          }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'flex-start' }}>
             {dueMistakes.map((_, i) => {
               const isActive = i === index;
               const isAnswered = answeredState[i];
               return (
-                <motion.button
-                  key={i}
-                  whileTap={{ scale: 0.9 }}
-                  onClick={() => handleJumpTo(i)}
+                <motion.button key={i} whileTap={{ scale: 0.9 }}
+                  onClick={() => { setIndex(i); setShowAnswer(false); }}
                   style={{
-                    width: '36px',
-                    height: '36px',
-                    borderRadius: '50%',
+                    width: '36px', height: '36px', borderRadius: '50%',
                     border: isActive ? '2px solid var(--primary)' : '2px solid #6b7a8f',
                     background: isActive ? 'rgba(61,90,139,0.25)' : (isAnswered ? 'rgba(58,140,122,0.2)' : 'rgba(255,255,255,0.1)'),
                     backdropFilter: 'blur(4px)',
                     color: isActive ? 'var(--primary)' : 'var(--text)',
-                    fontWeight: isActive ? '700' : '400',
-                    fontSize: '0.85rem',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    transition: 'all 0.2s',
-                    position: 'relative',
-                    flex: '0 0 36px'
-                  }}
-                >
+                    fontWeight: isActive ? '700' : '400', fontSize: '0.85rem',
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    transition: 'all 0.2s', position: 'relative', flex: '0 0 36px'
+                  }}>
                   {i + 1}
                   {isAnswered && !isActive && (
                     <span style={{
-                      position: 'absolute',
-                      top: '-4px',
-                      right: '-4px',
-                      width: '14px',
-                      height: '14px',
-                      background: '#3a8c7a',
-                      borderRadius: '50%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '8px',
-                      color: 'white'
-                    }}>
-                      ✓
-                    </span>
+                      position: 'absolute', top: '-4px', right: '-4px',
+                      width: '14px', height: '14px', background: '#3a8c7a',
+                      borderRadius: '50%', display: 'flex', alignItems: 'center',
+                      justifyContent: 'center', fontSize: '8px', color: 'white'
+                    }}>✓</span>
                   )}
                 </motion.button>
               );
             })}
           </div>
         </div>
-
-        {/* 底部按钮区：和左侧同高、同宽逻辑、同圆角 */}
-        <div style={{
-          flex: `0 0 ${ACTION_ROW_HEIGHT}px`,
-          display: 'flex',
-          alignItems: 'stretch',
-          width: '100%'
-        }}>
-          <motion.button
-            whileTap={{ scale: 0.96 }}
-            onClick={onBack}
-            style={{
-              ...actionBtnBase,
-              background: 'rgba(196,90,106,0.15)',
-              color: '#c45a6a'
-            }}
-          >
+        <div style={{ flex: `0 0 ${ACTION_ROW_HEIGHT}px`, display: 'flex', alignItems: 'stretch', width: '100%' }}>
+          <motion.button whileTap={{ scale: 0.96 }} onClick={onBack}
+            style={{ ...actionBtnBase, background: 'rgba(196,90,106,0.15)', color: '#c45a6a' }}>
             退出复习
           </motion.button>
         </div>
@@ -553,6 +397,8 @@ function ReviewFullscreen({
     </div>
   );
 }
+
+// ===== 上半段结束 =====
 // ========== App 主函数 ==========
 function App() {
   const reducedMotion = useReducedMotion();
@@ -564,11 +410,9 @@ function App() {
   const [selectedDate, setSelectedDate] = useState(toDateKey(new Date()));
   const [toast, setToast] = useState('');
   const [bootError, setBootError] = useState('');
-  const [importDraft, setImportDraft] = useState<MistakeDraft>(() => loadImportDraft());
-  const [questionImages, setQuestionImages] = useState<PendingImage[]>([]);
-  const [answerImages, setAnswerImages] = useState<PendingImage[]>([]);
-  const questionImagesRef = useRef<PendingImage[]>([]);
-  const answerImagesRef = useRef<PendingImage[]>([]);
+  const [importItems, setImportItems] = useState<ImportItem[]>(() => loadImportItems());
+  const [importIndex, setImportIndex] = useState(0);
+  const importItemsRef = useRef<ImportItem[]>([]);
   const draftImagesLoadedRef = useRef(false);
 
   const refresh = async () => {
@@ -588,8 +432,21 @@ function App() {
     ensureSeedData()
       .then(async () => {
         const draftImages = await db.draftImages.orderBy('createdAt').toArray();
-        setQuestionImages(draftImages.filter((image) => image.role === 'question').map(draftAssetToPending));
-        setAnswerImages(draftImages.filter((image) => image.role === 'answer').map(draftAssetToPending));
+        if (draftImages.length > 0) {
+          setImportItems((current) => {
+            const map = new Map(current.map((it) => [it.itemKey, it]));
+            draftImages.forEach((asset) => {
+              const key = (asset as DraftImageAsset & { itemKey?: string }).itemKey || current[0]?.itemKey;
+              if (!key) return;
+              const target = map.get(key);
+              if (!target) return;
+              const pending = draftAssetToPending(asset);
+              if (asset.role === 'question') target.questionImages.push(pending);
+              else target.answerImages.push(pending);
+            });
+            return Array.from(map.values());
+          });
+        }
         draftImagesLoadedRef.current = true;
       })
       .then(refresh)
@@ -607,35 +464,41 @@ function App() {
   }, [toast]);
 
   useEffect(() => {
-    questionImagesRef.current = questionImages;
-  }, [questionImages]);
+    importItemsRef.current = importItems;
+  }, [importItems]);
 
   useEffect(() => {
-    answerImagesRef.current = answerImages;
-  }, [answerImages]);
-
-  useEffect(() => {
-    window.localStorage.setItem(IMPORT_DRAFT_KEY, JSON.stringify(importDraft));
-  }, [importDraft]);
+    const stripped = importItems.map((it) => ({
+      itemKey: it.itemKey,
+      draft: it.draft,
+      questionImages: [],
+      answerImages: []
+    }));
+    window.localStorage.setItem(IMPORT_ITEMS_KEY, JSON.stringify(stripped));
+    window.localStorage.removeItem(IMPORT_LEGACY_DRAFT_KEY);
+  }, [importItems]);
 
   useEffect(() => {
     if (!draftImagesLoadedRef.current) return;
     const saveDraftImages = async () => {
-      const rows = [
-        ...questionImages.map((image) => pendingToDraftAsset(image, 'question')),
-        ...answerImages.map((image) => pendingToDraftAsset(image, 'answer'))
-      ];
+      const rows: DraftImageAsset[] = [];
+      importItems.forEach((it) => {
+        it.questionImages.forEach((img) => rows.push(pendingToDraftAsset(img, 'question', it.itemKey)));
+        it.answerImages.forEach((img) => rows.push(pendingToDraftAsset(img, 'answer', it.itemKey)));
+      });
       await db.transaction('rw', db.draftImages, async () => {
         await db.draftImages.clear();
         if (rows.length) await db.draftImages.bulkPut(rows);
       });
     };
     saveDraftImages().catch((err) => console.error('保存导入草稿图片失败', err));
-  }, [answerImages, questionImages]);
+  }, [importItems]);
 
   useEffect(() => () => {
-    releasePendingImages(questionImagesRef.current);
-    releasePendingImages(answerImagesRef.current);
+    importItemsRef.current.forEach((it) => {
+      releasePendingImages(it.questionImages);
+      releasePendingImages(it.answerImages);
+    });
   }, []);
 
   const imagesByMistake = useMemo(() => {
@@ -704,10 +567,7 @@ function App() {
           <p className="eyebrow">{new Date().toLocaleDateString('zh-CN', { weekday: 'long' })}</p>
           <h1>错题本</h1>
         </div>
-        <motion.div
-          className="stat-pill"
-          transition={reducedMotion ? { duration: 0 } : springSoft}
-        >
+        <motion.div className="stat-pill" transition={reducedMotion ? { duration: 0 } : springSoft}>
           {dueMistakes.length} 待复习
         </motion.div>
       </header>
@@ -732,12 +592,10 @@ function App() {
               <ImportView
                 settings={settings}
                 taxonomiesByType={taxonomiesByType}
-                draft={importDraft}
-                onDraftChange={setImportDraft}
-                questionImages={questionImages}
-                answerImages={answerImages}
-                onQuestionImagesChange={setQuestionImages}
-                onAnswerImagesChange={setAnswerImages}
+                items={importItems}
+                currentIndex={importIndex}
+                onItemsChange={setImportItems}
+                onIndexChange={setImportIndex}
                 onSaved={async () => {
                   await refresh();
                   setToast('已存入错题本');
@@ -803,7 +661,8 @@ function App() {
     </div>
   );
 }
-// ===== TabButton（优化性能，减少卡顿） =====
+
+// ===== TabButton =====
 function TabButton({ active, icon, label, onClick }: { active: boolean; icon: JSX.Element; label: string; onClick: () => void }) {
   const reducedMotion = useReducedMotion();
   return (
@@ -831,26 +690,15 @@ function TabButton({ active, icon, label, onClick }: { active: boolean; icon: JS
 
 // ===== TodayView =====
 function TodayView({
-  settings,
-  dueMistakes,
-  onStartReview
-}: {
-  settings: AppSettings;
-  dueMistakes: MistakeItem[];
-  onStartReview: () => void;
-}) {
+  settings, dueMistakes, onStartReview
+}: { settings: AppSettings; dueMistakes: MistakeItem[]; onStartReview: () => void }) {
   const hasDue = dueMistakes.length > 0;
   return (
     <section className="stack animate-card" style={{ cursor: hasDue ? 'pointer' : 'default' }} onClick={hasDue ? onStartReview : undefined}>
       <SectionHeading title="今日复习" meta={`${dueMistakes.length} 道`} />
       <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        alignItems: 'center',
-        height: '40vh',
-        gap: '6px',
-        userSelect: 'none'
+        display: 'flex', flexDirection: 'column', justifyContent: 'center',
+        alignItems: 'center', height: '40vh', gap: '6px', userSelect: 'none'
       }}>
         {hasDue ? (
           <>
@@ -865,55 +713,82 @@ function TodayView({
   );
 }
 
-// ===== ImportView（7:3 布局） =====
+// ===== ImportView（多题横滑 + 回弹 tab + 一键全部保存） =====
 function ImportView({
-  settings,
-  taxonomiesByType,
-  draft,
-  onDraftChange,
-  questionImages,
-  answerImages,
-  onQuestionImagesChange,
-  onAnswerImagesChange,
-  onSaved
+  settings, taxonomiesByType, items, currentIndex, onItemsChange, onIndexChange, onSaved
 }: {
   settings: AppSettings;
   taxonomiesByType: Record<TaxonomyType, TaxonomyOption[]>;
-  draft: MistakeDraft;
-  onDraftChange: Dispatch<SetStateAction<MistakeDraft>>;
-  questionImages: PendingImage[];
-  answerImages: PendingImage[];
-  onQuestionImagesChange: Dispatch<SetStateAction<PendingImage[]>>;
-  onAnswerImagesChange: Dispatch<SetStateAction<PendingImage[]>>;
+  items: ImportItem[];
+  currentIndex: number;
+  onItemsChange: Dispatch<SetStateAction<ImportItem[]>>;
+  onIndexChange: (i: number) => void;
   onSaved: () => Promise<void>;
 }) {
   const questionInputRef = useRef<HTMLInputElement>(null);
   const answerInputRef = useRef<HTMLInputElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const scrollTimerRef = useRef<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [activeInput, setActiveInput] = useState<{ itemKey: string; role: ImageRole } | null>(null);
 
   const defaultSubjectId = taxonomiesByType.subject[0]?.id || '';
   const defaultCauseId = taxonomiesByType.cause[0]?.id || '';
-  useEffect(() => {
-    onDraftChange((current) => ({
-      ...current,
-      subjectId: current.subjectId || defaultSubjectId,
-      causeId: current.causeId || defaultCauseId
-    }));
-  }, [defaultCauseId, defaultSubjectId, onDraftChange]);
 
-  const addFiles = (files: File[], role: ImageRole) => {
+  useEffect(() => {
+    if (!defaultSubjectId && !defaultCauseId) return;
+    onItemsChange((current) => current.map((it) => ({
+      ...it,
+      draft: {
+        ...it.draft,
+        subjectId: it.draft.subjectId || defaultSubjectId,
+        causeId: it.draft.causeId || defaultCauseId
+      }
+    })));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaultSubjectId, defaultCauseId]);
+
+  // 切题时让选中 tab 滚进视野
+  useEffect(() => {
+    const container = tabsRef.current;
+    if (!container) return;
+    const active = container.querySelector<HTMLElement>('.import-carousel-tab.active');
+    if (active) {
+      active.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
+  }, [currentIndex, items.length]);
+
+  const updateItem = (index: number, updater: (it: ImportItem) => ImportItem) => {
+    onItemsChange((current) => {
+      const next = [...current];
+      if (!next[index]) return current;
+      next[index] = updater(next[index]);
+      return next;
+    });
+  };
+
+  const updateDraft = (index: number, patch: Partial<MistakeDraft>) => {
+    updateItem(index, (it) => ({ ...it, draft: { ...it.draft, ...patch } }));
+  };
+
+  const addFilesToItem = (index: number, files: File[], role: ImageRole) => {
     const pending = files
       .filter((file) => file.type.startsWith('image/'))
       .map((file) => ({ id: crypto.randomUUID(), file, url: URL.createObjectURL(file) }));
-    if (role === 'question') onQuestionImagesChange((current) => [...current, ...pending]);
-    else onAnswerImagesChange((current) => [...current, ...pending]);
+    if (!pending.length) return;
+    updateItem(index, (it) => role === 'question'
+      ? { ...it, questionImages: [...it.questionImages, ...pending] }
+      : { ...it, answerImages: [...it.answerImages, ...pending] }
+    );
   };
 
-  const handlePickNative = async (role: ImageRole) => {
+  const handlePickNative = async (index: number, role: ImageRole) => {
+    setActiveInput({ itemKey: items[index].itemKey, role });
     try {
       const picked = await pickImagesFromDevice();
-      addFiles(picked, role);
+      addFilesToItem(index, picked, role);
     } catch (err) {
       if (role === 'question') questionInputRef.current?.click();
       else answerInputRef.current?.click();
@@ -921,23 +796,88 @@ function ImportView({
     }
   };
 
-  const handleCamera = async (role: ImageRole) => {
+  const handleCamera = async (index: number, role: ImageRole) => {
     try {
       const photo = await takePhotoFromCamera();
-      addFiles([photo], role);
+      addFilesToItem(index, [photo], role);
     } catch (err) {
       setError(err instanceof Error ? err.message : '拍照失败');
     }
   };
 
-  const removePending = (id: string, role: ImageRole) => {
-    const removeFrom = (list: PendingImage[]) => {
-      const target = list.find((image) => image.id === id);
+  const removePending = (index: number, id: string, role: ImageRole) => {
+    updateItem(index, (it) => {
+      const list = role === 'question' ? it.questionImages : it.answerImages;
+      const target = list.find((img) => img.id === id);
       if (target) URL.revokeObjectURL(target.url);
-      return list.filter((image) => image.id !== id);
-    };
-    if (role === 'question') onQuestionImagesChange(removeFrom);
-    else onAnswerImagesChange(removeFrom);
+      const next = list.filter((img) => img.id !== id);
+      return role === 'question'
+        ? { ...it, questionImages: next }
+        : { ...it, answerImages: next };
+    });
+  };
+
+  const handleFileInputChange = (event: React.ChangeEvent<HTMLInputElement>, role: ImageRole) => {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = '';
+    if (!files.length) return;
+    let targetIndex = currentIndex;
+    if (activeInput) {
+      const idx = items.findIndex((it) => it.itemKey === activeInput.itemKey);
+      if (idx >= 0) targetIndex = idx;
+    }
+    addFilesToItem(targetIndex, files, role);
+    setActiveInput(null);
+  };
+
+  const addNewItem = () => {
+    onItemsChange((current) => [...current, createEmptyItem()]);
+    const nextIndex = items.length;
+    onIndexChange(nextIndex);
+    window.setTimeout(() => {
+      const el = trackRef.current;
+      if (!el) return;
+      el.scrollTo({ left: el.clientWidth * nextIndex, behavior: 'smooth' });
+    }, 40);
+  };
+
+  const removeItem = (index: number) => {
+    onItemsChange((current) => {
+      if (current.length <= 1) return [createEmptyItem()];
+      const next = [...current];
+      const removed = next.splice(index, 1)[0];
+      if (removed) {
+        releasePendingImages(removed.questionImages);
+        releasePendingImages(removed.answerImages);
+      }
+      return next;
+    });
+    const nextIndex = Math.max(0, Math.min(currentIndex, items.length - 2));
+    onIndexChange(nextIndex);
+    window.setTimeout(() => {
+      const el = trackRef.current;
+      if (!el) return;
+      el.scrollTo({ left: el.clientWidth * nextIndex, behavior: 'smooth' });
+    }, 40);
+  };
+
+  const jumpTo = (index: number) => {
+    onIndexChange(index);
+    const el = trackRef.current;
+    if (!el) return;
+    el.scrollTo({ left: el.clientWidth * index, behavior: 'smooth' });
+  };
+
+  const handleScroll = () => {
+    const el = trackRef.current;
+    if (!el) return;
+    if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current);
+    scrollTimerRef.current = window.setTimeout(() => {
+      const page = Math.round(el.scrollLeft / el.clientWidth);
+      if (page !== currentIndex && page >= 0 && page < items.length) {
+        onIndexChange(page);
+      }
+    }, 90);
   };
 
   const processImages = async (list: PendingImage[], role: ImageRole) => {
@@ -956,31 +896,39 @@ function ImportView({
     );
   };
 
-  const handleSave = async () => {
-    if (questionImages.length === 0) {
-      setError('先导入题目图片');
-      return;
-    }
-    if (!draft.subjectId || !draft.causeId || !draft.sourceName.trim()) {
-      setError('科目、错因、题源都要填写');
-      return;
+  const validItems = () => items.filter((it) => it.questionImages.length > 0);
+
+  const handleSaveAll = async () => {
+    const toSave = validItems();
+    if (toSave.length === 0) { setError('至少给一道题导入题目图片'); return; }
+
+    for (const it of toSave) {
+      if (!it.draft.subjectId || !it.draft.causeId || !it.draft.sourceName.trim()) {
+        setError('每道题的科目、错因、题源都要填写');
+        return;
+      }
     }
 
     setSaving(true);
     setError('');
     try {
-      const processed = [
-        ...(await processImages(questionImages, 'question')),
-        ...(await processImages(answerImages, 'answer'))
-      ];
-      await addMistake(draft, processed);
-      releasePendingImages(questionImages);
-      releasePendingImages(answerImages);
-      onQuestionImagesChange([]);
-      onAnswerImagesChange([]);
-      onDraftChange(emptyDraft);
-      window.localStorage.removeItem(IMPORT_DRAFT_KEY);
+      for (const it of toSave) {
+        const processed = [
+          ...(await processImages(it.questionImages, 'question')),
+          ...(await processImages(it.answerImages, 'answer'))
+        ];
+        await addMistake(it.draft, processed);
+      }
+      items.forEach((it) => {
+        releasePendingImages(it.questionImages);
+        releasePendingImages(it.answerImages);
+      });
+      onItemsChange([createEmptyItem()]);
+      onIndexChange(0);
+      window.localStorage.removeItem(IMPORT_ITEMS_KEY);
       await db.draftImages.clear();
+      const el = trackRef.current;
+      if (el) el.scrollTo({ left: 0, behavior: 'smooth' });
       await onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : '保存失败');
@@ -989,124 +937,193 @@ function ImportView({
     }
   };
 
+  const pillTransition = {
+    type: 'spring' as const,
+    stiffness: 500,
+    damping: 26,
+    mass: 0.8,
+    restDelta: 0.001
+  };
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
-      style={{
-        display: 'grid',
-        gridTemplateColumns: '7fr 3fr',
-        gap: '24px',
-        padding: '24px',
-        borderRadius: 'var(--radius-card)',
-        background: 'rgba(255,255,255,0.4)',
-        backdropFilter: 'blur(24px) saturate(1.3)',
-        WebkitBackdropFilter: 'blur(24px) saturate(1.3)',
-        border: '1px solid rgba(255,255,255,0.3)',
-        boxShadow: '0 16px 40px rgba(26,38,52,0.06)'
-      }}
-    >
-      {/* 左侧 7 */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <SectionHeading title="添加错题" meta={`${questionImages.length + answerImages.length} 张图片`} />
-        <div className="form-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-          <SegmentedControl
-            label="科目"
-            options={taxonomiesByType.subject.map(opt => ({ id: opt.id, name: opt.name }))}
-            value={draft.subjectId}
-            onChange={(val) => onDraftChange({ ...draft, subjectId: val })}
-          />
-          <SegmentedControl
-            label="错因"
-            options={taxonomiesByType.cause.map(opt => ({ id: opt.id, name: opt.name }))}
-            value={draft.causeId}
-            onChange={(val) => onDraftChange({ ...draft, causeId: val })}
-          />
-          <div className="field" style={{ gridColumn: '1 / -1' }}>
-            <span>题源</span>
-            <input
-              value={draft.sourceName}
-              placeholder="例如：一模试卷第12题"
-              onChange={(e) => onDraftChange({ ...draft, sourceName: e.target.value, sourceId: '' })}
-            />
-            <div className="choice-chips" style={{ marginTop: '6px' }}>
-              {taxonomiesByType.source.map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  className={`chip ${draft.sourceId === opt.id ? 'selected' : ''}`}
-                  onClick={() => onDraftChange({ ...draft, sourceId: opt.id, sourceName: opt.name })}
-                >
-                  {opt.name}
-                </button>
-              ))}
+    <div className="import-carousel-wrap">
+      <input ref={questionInputRef} hidden type="file" accept="image/*" multiple
+        onChange={(e) => handleFileInputChange(e, 'question')} />
+      <input ref={answerInputRef} hidden type="file" accept="image/*" multiple
+        onChange={(e) => handleFileInputChange(e, 'answer')} />
+
+      <div className="import-carousel-head">
+        <div className="import-carousel-tabs" ref={tabsRef}>
+          {items.map((it, i) => {
+            const active = i === currentIndex;
+            const imgCount = it.questionImages.length + it.answerImages.length;
+            return (
+              <button
+                key={it.itemKey}
+                type="button"
+                className={`import-carousel-tab ${active ? 'active' : ''}`}
+                onClick={() => jumpTo(i)}
+              >
+                {active && (
+                  <motion.span
+                    layoutId="import-tab-pill"
+                    className="import-tab-pill"
+                    transition={pillTransition}
+                  />
+                )}
+                <span className="import-tab-label">
+                  第 {i + 1} 题
+                  {imgCount > 0 && (
+                    <span className="import-page-index">{imgCount}</span>
+                  )}
+                </span>
+              </button>
+            );
+          })}
+          <button type="button" className="import-carousel-tab import-carousel-add-tab" onClick={addNewItem}>
+            <Plus size={14} /> 新增
+          </button>
+        </div>
+      </div>
+
+      <div
+        className="import-carousel-track"
+        ref={trackRef}
+        onScroll={handleScroll}
+      >
+        {items.map((item, index) => (
+          <div className="import-page" key={item.itemKey}>
+            <div className="import-page-inner">
+              {/* 左侧 7 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <SectionHeading title={`第 ${index + 1} 题`} meta={`${item.questionImages.length + item.answerImages.length} 张图片`} />
+                <div className="form-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <SegmentedControl
+                    label="科目"
+                    options={taxonomiesByType.subject.map(opt => ({ id: opt.id, name: opt.name }))}
+                    value={item.draft.subjectId}
+                    onChange={(val) => updateDraft(index, { subjectId: val })}
+                  />
+                  <SegmentedControl
+                    label="错因"
+                    options={taxonomiesByType.cause.map(opt => ({ id: opt.id, name: opt.name }))}
+                    value={item.draft.causeId}
+                    onChange={(val) => updateDraft(index, { causeId: val })}
+                  />
+                  <div className="field" style={{ gridColumn: '1 / -1' }}>
+                    <span>题源</span>
+                    <input
+                      value={item.draft.sourceName}
+                      placeholder="例如：一模试卷第12题"
+                      onChange={(e) => updateDraft(index, { sourceName: e.target.value, sourceId: '' })}
+                    />
+                    <div className="choice-chips" style={{ marginTop: '6px' }}>
+                      {taxonomiesByType.source.map((opt) => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          className={`chip ${item.draft.sourceId === opt.id ? 'selected' : ''}`}
+                          onClick={() => updateDraft(index, { sourceId: opt.id, sourceName: opt.name })}
+                        >
+                          {opt.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <SegmentedControl
+                    label="难度"
+                    options={[
+                      { id: 'hard', name: difficultyLabel.hard },
+                      { id: 'medium', name: difficultyLabel.medium },
+                      { id: 'easy', name: difficultyLabel.easy }
+                    ]}
+                    value={item.draft.difficulty}
+                    onChange={(val) => updateDraft(index, { difficulty: val as Difficulty })}
+                  />
+                  <TextArea label="备注" value={item.draft.note} onChange={(note) => updateDraft(index, { note })} />
+                  <TextArea label="启发" value={item.draft.inspiration} onChange={(inspiration) => updateDraft(index, { inspiration })} />
+                </div>
+              </div>
+
+              {/* 右侧 3 */}
+              <div style={{
+                display: 'flex', flexDirection: 'column', gap: '16px',
+                background: 'rgba(255,255,255,0.25)', backdropFilter: 'blur(8px)',
+                borderRadius: 'var(--radius-control)', padding: '16px',
+                border: '1px solid rgba(255,255,255,0.2)'
+              }}>
+                <TextInput label="标题" value={item.draft.title} placeholder="可不填"
+                  onChange={(title) => updateDraft(index, { title })} />
+
+                <div className="field">
+                  <span>题目图片</span>
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                    <MotionTapButton type="button" onClick={() => handlePickNative(index, 'question')}
+                      style={{ flex: 1, padding: '8px', borderRadius: 'var(--radius-control)', background: 'rgba(61,90,139,0.1)', border: '1px solid var(--line)', fontSize: '0.8rem' }}>
+                      📷 相册
+                    </MotionTapButton>
+                    <MotionTapButton type="button" onClick={() => handleCamera(index, 'question')}
+                      style={{ flex: 1, padding: '8px', borderRadius: 'var(--radius-control)', background: 'rgba(61,90,139,0.1)', border: '1px solid var(--line)', fontSize: '0.8rem' }}>
+                      📸 拍照
+                    </MotionTapButton>
+                  </div>
+                  <PreviewGrid images={item.questionImages} onRemove={(id) => removePending(index, id, 'question')} />
+                </div>
+
+                <AnswerField
+                  value={item.draft.answer}
+                  images={item.answerImages}
+                  onChange={(answer) => updateDraft(index, { answer })}
+                  onGallery={() => handlePickNative(index, 'answer')}
+                  onCamera={() => handleCamera(index, 'answer')}
+                  onRemove={(id) => removePending(index, id, 'answer')}
+                />
+
+                {items.length > 1 && (
+                  <MotionTapButton
+                    type="button"
+                    onClick={() => removeItem(index)}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      minHeight: 40, borderRadius: 'var(--radius-control)',
+                      background: 'rgba(196,90,106,0.12)', border: '1px solid rgba(196,90,106,0.3)',
+                      color: '#c45a6a', fontSize: 13, fontWeight: 600, cursor: 'pointer'
+                    }}
+                  >
+                    <X size={16} /> 删除这一题
+                  </MotionTapButton>
+                )}
+              </div>
             </div>
           </div>
-          <SegmentedControl
-            label="难度"
-            options={[
-              { id: 'hard', name: difficultyLabel.hard },
-              { id: 'medium', name: difficultyLabel.medium },
-              { id: 'easy', name: difficultyLabel.easy }
-            ]}
-            value={draft.difficulty}
-            onChange={(val) => onDraftChange({ ...draft, difficulty: val as Difficulty })}
-          />
-          <TextArea label="备注" value={draft.note} onChange={(note) => onDraftChange({ ...draft, note })} />
-          <TextArea label="启发" value={draft.inspiration} onChange={(inspiration) => onDraftChange({ ...draft, inspiration })} />
+        ))}
+      </div>
+
+      <div className="import-carousel-footer">
+        <div className="import-carousel-footer-left">
+          <span>共 {items.length} 道</span>
+          <span>·</span>
+          <span>当前第 {currentIndex + 1} 道</span>
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button type="button" className="import-add-btn" onClick={addNewItem}>
+            <Plus size={15} /> 加一题
+          </button>
+          <button type="button" className="import-save-all-btn" disabled={saving} onClick={handleSaveAll}>
+            {saving ? '保存中…' : '一键全部保存'}
+          </button>
         </div>
       </div>
 
-      {/* 右侧 3 */}
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '16px',
-        background: 'rgba(255,255,255,0.25)',
-        backdropFilter: 'blur(8px)',
-        borderRadius: 'var(--radius-control)',
-        padding: '16px',
-        border: '1px solid rgba(255,255,255,0.2)'
-      }}>
-        <input ref={questionInputRef} hidden type="file" accept="image/*" multiple onChange={(event) => addFiles(Array.from(event.target.files ?? []), 'question')} />
-        <input ref={answerInputRef} hidden type="file" accept="image/*" multiple onChange={(event) => addFiles(Array.from(event.target.files ?? []), 'answer')} />
-
-        <TextInput label="标题" value={draft.title} placeholder="可不填" onChange={(title) => onDraftChange({ ...draft, title })} />
-
-        <div className="field">
-          <span>题目图片</span>
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-            <MotionTapButton type="button" onClick={() => handlePickNative('question')} style={{ flex: 1, padding: '8px', borderRadius: 'var(--radius-control)', background: 'rgba(61,90,139,0.1)', border: '1px solid var(--line)', fontSize: '0.8rem' }}>📷 相册</MotionTapButton>
-            <MotionTapButton type="button" onClick={() => handleCamera('question')} style={{ flex: 1, padding: '8px', borderRadius: 'var(--radius-control)', background: 'rgba(61,90,139,0.1)', border: '1px solid var(--line)', fontSize: '0.8rem' }}>📸 拍照</MotionTapButton>
-          </div>
-          <PreviewGrid images={questionImages} onRemove={(id) => removePending(id, 'question')} />
-        </div>
-
-        <AnswerField
-          value={draft.answer}
-          images={answerImages}
-          onChange={(answer) => onDraftChange({ ...draft, answer })}
-          onGallery={() => handlePickNative('answer')}
-          onCamera={() => handleCamera('answer')}
-          onRemove={(id) => removePending(id, 'answer')}
-        />
-
-        {error && <p className="form-error">{error}</p>}
-        <MotionTapButton className="primary-action" type="button" disabled={saving} onClick={handleSave}>
-          {saving ? '保存中' : '存入错题本'}
-        </MotionTapButton>
-      </div>
-    </motion.div>
+      {error && <p className="form-error" style={{ padding: '0 20px 12px' }}>{error}</p>}
+      <div className="import-swipe-hint">← 左右滑动可切换题目 →</div>
+    </div>
   );
 }
-// ===== GalleryView（5:5 两列，内联筛选 + 滑块回弹） =====
+
+// ===== GalleryView（内联筛选 + 回弹滑块） =====
 function GalleryView({
-  mistakes,
-  imagesByMistake,
-  taxonomyMap,
-  taxonomiesByType,
-  onArchive
+  mistakes, imagesByMistake, taxonomyMap, taxonomiesByType, onArchive
 }: {
   mistakes: MistakeItem[];
   imagesByMistake: Map<string, ImageAsset[]>;
@@ -1140,14 +1157,9 @@ function GalleryView({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
       style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '16px',
-        padding: '20px',
-        borderRadius: 'var(--radius-card)',
-        background: 'rgba(255,255,255,0.35)',
-        backdropFilter: 'blur(20px) saturate(1.2)',
-        WebkitBackdropFilter: 'blur(20px) saturate(1.2)',
+        display: 'flex', flexDirection: 'column', gap: '16px', padding: '20px',
+        borderRadius: 'var(--radius-card)', background: 'rgba(255,255,255,0.35)',
+        backdropFilter: 'blur(20px) saturate(1.2)', WebkitBackdropFilter: 'blur(20px) saturate(1.2)',
         border: '1px solid rgba(255,255,255,0.3)'
       }}
     >
@@ -1187,11 +1199,8 @@ function GalleryView({
       </div>
 
       <div style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 1fr',
-        gap: '16px',
-        overflow: 'auto',
-        maxHeight: '70vh'
+        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px',
+        overflow: 'auto', maxHeight: '70vh'
       }}>
         {filtered.map((mistake) => (
           <MistakeCard
@@ -1212,11 +1221,7 @@ function GalleryView({
 
 // 内联筛选组：选中项背后有会滑动 + 伸缩 + 回弹的高亮块
 function InlineFilterGroup({
-  groupKey,
-  allLabel,
-  options,
-  value,
-  onChange
+  groupKey, allLabel, options, value, onChange
 }: {
   groupKey: string;
   allLabel: string;
@@ -1224,7 +1229,6 @@ function InlineFilterGroup({
   value: string;
   onChange: (value: string) => void;
 }) {
-  // 回弹弹簧参数：damping 小 = 回弹明显；stiffness 大 = 速度快
   const pillTransition = {
     type: 'spring' as const,
     stiffness: 520,
@@ -1261,13 +1265,10 @@ function InlineFilterGroup({
     </div>
   );
 }
-// ===== 以下组件保持不变 =====
+
+// ===== ImagePickerPanel =====
 function ImagePickerPanel({
-  title,
-  images,
-  onGallery,
-  onCamera,
-  onRemove
+  title, images, onGallery, onCamera, onRemove
 }: {
   title: string;
   images: PendingImage[];
@@ -1283,12 +1284,10 @@ function ImagePickerPanel({
       </div>
       <div className="import-actions">
         <MotionTapButton type="button" onClick={onGallery}>
-          <Images size={18} />
-          相册
+          <Images size={18} /> 相册
         </MotionTapButton>
         <MotionTapButton type="button" onClick={onCamera}>
-          <Camera size={18} />
-          拍照
+          <Camera size={18} /> 拍照
         </MotionTapButton>
       </div>
       <PreviewGrid images={images} onRemove={onRemove} />
@@ -1296,13 +1295,9 @@ function ImagePickerPanel({
   );
 }
 
+// ===== AnswerField =====
 function AnswerField({
-  value,
-  images,
-  onChange,
-  onGallery,
-  onCamera,
-  onRemove
+  value, images, onChange, onGallery, onCamera, onRemove
 }: {
   value: string;
   images: PendingImage[];
@@ -1317,12 +1312,10 @@ function AnswerField({
       <textarea value={value} rows={4} onChange={(event) => onChange(event.target.value)} />
       <div className="answer-image-tools">
         <MotionTapButton type="button" onClick={onGallery}>
-          <Images size={18} />
-          相册
+          <Images size={18} /> 相册
         </MotionTapButton>
         <MotionTapButton type="button" onClick={onCamera}>
-          <Camera size={18} />
-          拍照
+          <Camera size={18} /> 拍照
         </MotionTapButton>
       </div>
       <PreviewGrid images={images} onRemove={onRemove} />
@@ -1330,6 +1323,7 @@ function AnswerField({
   );
 }
 
+// ===== PreviewGrid =====
 function PreviewGrid({ images, onRemove }: { images: PendingImage[]; onRemove: (id: string) => void }) {
   const [viewer, setViewer] = useState<{ src: string; title: string } | null>(null);
 
@@ -1366,11 +1360,9 @@ function PreviewGrid({ images, onRemove }: { images: PendingImage[]; onRemove: (
   );
 }
 
+// ===== SourceInput =====
 function SourceInput({
-  value,
-  options,
-  onChange,
-  onPick
+  value, options, onChange, onPick
 }: {
   value: string;
   options: TaxonomyOption[];
@@ -1392,12 +1384,9 @@ function SourceInput({
   );
 }
 
+// ===== CalendarView =====
 function CalendarView({
-  mistakes,
-  imagesByMistake,
-  taxonomyMap,
-  selectedDate,
-  onSelectDate
+  mistakes, imagesByMistake, taxonomyMap, selectedDate, onSelectDate
 }: {
   mistakes: MistakeItem[];
   imagesByMistake: Map<string, ImageAsset[]>;
@@ -1492,13 +1481,9 @@ function CalendarView({
   );
 }
 
+// ===== SettingsView =====
 function SettingsView({
-  settings,
-  taxonomiesByType,
-  onRefresh,
-  onExport,
-  onImport,
-  onToast
+  settings, taxonomiesByType, onRefresh, onExport, onImport, onToast
 }: {
   settings: AppSettings;
   taxonomiesByType: Record<TaxonomyType, TaxonomyOption[]>;
@@ -1561,15 +1546,10 @@ function SettingsView({
           className="mini-primary"
           onClick={handleSaveIntervals}
           style={{
-            background: 'rgba(61,90,139,0.15)',
-            backdropFilter: 'blur(8px)',
-            border: '1px solid rgba(255,255,255,0.3)',
-            color: 'var(--primary)',
-            padding: '8px 20px',
-            borderRadius: '40px',
-            fontWeight: '600',
-            cursor: 'pointer',
-            transition: 'all 0.2s'
+            background: 'rgba(61,90,139,0.15)', backdropFilter: 'blur(8px)',
+            border: '1px solid rgba(255,255,255,0.3)', color: 'var(--primary)',
+            padding: '8px 20px', borderRadius: '40px', fontWeight: '600',
+            cursor: 'pointer', transition: 'all 0.2s'
           }}
         >
           保存策略
@@ -1580,12 +1560,10 @@ function SettingsView({
         <input hidden ref={backupInputRef} type="file" accept="application/json" onChange={(event) => handleImportFile(event.target.files?.[0])} />
         <div className="backup-actions">
           <MotionTapButton type="button" onClick={onExport}>
-            <Download size={18} />
-            导出
+            <Download size={18} /> 导出
           </MotionTapButton>
           <MotionTapButton type="button" onClick={() => backupInputRef.current?.click()}>
-            <RotateCcw size={18} />
-            恢复
+            <RotateCcw size={18} /> 恢复
           </MotionTapButton>
         </div>
       </SettingsAccordion>
@@ -1601,12 +1579,9 @@ function SettingsView({
   );
 }
 
+// ===== SettingsAccordion =====
 function SettingsAccordion({
-  icon,
-  title,
-  open,
-  onToggle,
-  children
+  icon, title, open, onToggle, children
 }: {
   icon: JSX.Element;
   title: string;
@@ -1640,6 +1615,7 @@ function SettingsAccordion({
   );
 }
 
+// ===== ReviewPreview =====
 function ReviewPreview({ intervals }: { intervals: number[] }) {
   const sampleStage = Math.min(2, Math.max(0, intervals.length - 1));
   return (
@@ -1664,6 +1640,7 @@ function ReviewPreview({ intervals }: { intervals: number[] }) {
   );
 }
 
+// ===== TaxonomyEditor =====
 function TaxonomyEditor({ item, onRefresh }: { item: TaxonomyOption; onRefresh: () => Promise<void> }) {
   const [name, setName] = useState(item.name);
 
@@ -1683,13 +1660,9 @@ function TaxonomyEditor({ item, onRefresh }: { item: TaxonomyOption; onRefresh: 
   );
 }
 
+// ===== MistakeCard =====
 function MistakeCard({
-  mistake,
-  images,
-  taxonomyMap,
-  compact = false,
-  footer,
-  onArchive
+  mistake, images, taxonomyMap, compact = false, footer, onArchive
 }: {
   mistake: MistakeItem;
   images: ImageAsset[];
@@ -1761,6 +1734,7 @@ function MistakeCard({
   );
 }
 
+// ===== ImageStrip =====
 function ImageStrip({ images }: { images: ImageAsset[] }) {
   const [urls, setUrls] = useState<Array<{ thumb: string; full: string }>>([]);
   const [viewer, setViewer] = useState<{ src: string; title: string } | null>(null);
@@ -1800,6 +1774,7 @@ function ImageStrip({ images }: { images: ImageAsset[] }) {
   );
 }
 
+// ===== SectionHeading =====
 function SectionHeading({ title, meta }: { title: string; meta?: string }) {
   return (
     <div className="section-heading">
@@ -1809,6 +1784,7 @@ function SectionHeading({ title, meta }: { title: string; meta?: string }) {
   );
 }
 
+// ===== EmptyState =====
 function EmptyState({ icon, title, text }: { icon: JSX.Element; title: string; text: string }) {
   return (
     <motion.div className="empty-state" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={springSoft}>
@@ -1819,6 +1795,7 @@ function EmptyState({ icon, title, text }: { icon: JSX.Element; title: string; t
   );
 }
 
+// ===== TextInput =====
 function TextInput({ label, value, placeholder, onChange }: { label: string; value: string; placeholder?: string; onChange: (value: string) => void }) {
   return (
     <label className="field">
@@ -1828,6 +1805,7 @@ function TextInput({ label, value, placeholder, onChange }: { label: string; val
   );
 }
 
+// ===== TextArea =====
 function TextArea({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
   return (
     <label className="field full">
@@ -1837,17 +1815,14 @@ function TextArea({ label, value, onChange }: { label: string; value: string; on
   );
 }
 
+// ===== ChoiceInput / SelectInput / MiniSelect =====
 interface ChoiceOption {
   id: string;
   name: string;
 }
 
 function ChoiceInput({
-  label,
-  value,
-  options,
-  placeholder = '请选择',
-  onChange
+  label, value, options, placeholder = '请选择', onChange
 }: {
   label?: string;
   value: string;
@@ -1922,6 +1897,7 @@ function MiniSelect({ value, options, placeholder, onChange }: { value: string; 
   return <ChoiceInput value={value} options={[{ id: '', name: placeholder }, ...options]} placeholder={placeholder} onChange={onChange} />;
 }
 
+// ===== ImageLightbox =====
 function ImageLightbox({ image, onClose }: { image: { src: string; title: string } | null; onClose: () => void }) {
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -2018,12 +1994,8 @@ function ImageLightbox({ image, onClose }: { image: { src: string; title: string
               y: panRef.current.offsetY + event.clientY - panRef.current.y
             });
           }}
-          onMouseUp={() => {
-            panRef.current = null;
-          }}
-          onMouseLeave={() => {
-            panRef.current = null;
-          }}
+          onMouseUp={() => { panRef.current = null; }}
+          onMouseLeave={() => { panRef.current = null; }}
         >
           <img
             src={image.src}
@@ -2039,9 +2011,9 @@ function ImageLightbox({ image, onClose }: { image: { src: string; title: string
   return createPortal(lightbox, document.body);
 }
 
+// ===== MotionTapButton =====
 function MotionTapButton({
-  children,
-  ...props
+  children, ...props
 }: ComponentProps<typeof motion.button> & { children: ReactNode }) {
   const reducedMotion = useReducedMotion();
   return (
@@ -2055,6 +2027,7 @@ function MotionTapButton({
   );
 }
 
+// ===== parseIntervals =====
 function parseIntervals(value: string, fallback: number[]) {
   const parsed = value
     .split(/[\s,，、]+/)
