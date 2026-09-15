@@ -408,7 +408,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
   display: grid;
   grid-template-columns: minmax(0, 7fr) minmax(240px, 3fr);
   gap: 20px;
-  max-width: 720px;
+  max-width: 760px;
   margin: 0 auto;
 }
 .import-left-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
@@ -540,7 +540,6 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
 }
 .review-inspiration b { color: var(--primary); margin-right: 6px; }
 
-/* 底部按钮区（跟右侧退出按钮对齐，淡描边风格） */
 .review-action-row {
   flex: 0 0 auto;
   display: flex;
@@ -607,7 +606,6 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
 }
 .review-result-mastered:active { background: rgba(61, 90, 139, 0.16); }
 
-/* 右侧 2 */
 .review-right {
   display: flex; flex-direction: column; gap: 12px;
   min-width: 0; min-height: 0;
@@ -627,7 +625,6 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
 }
 .review-right-title { font-size: 14px; font-weight: 600; margin: 0; color: var(--text); }
 
-/* 题号：一排 3 个 */
 .review-page-numbers {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
