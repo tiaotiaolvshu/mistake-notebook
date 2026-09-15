@@ -14,6 +14,7 @@ import {
   ImagePlus,
   Images,
   MoreHorizontal,
+  Pencil,
   Plus,
   RotateCcw,
   Search,
@@ -27,11 +28,13 @@ import {
   addMistake,
   addTaxonomy,
   db,
+  deleteMistake,
   deleteTaxonomy,
   ensureSeedData,
   getSettings,
   recordReview,
   renameTaxonomy,
+  updateMistake,
   updateSettings
 } from './data/db';
 import { exportBackup, importBackup } from './data/backup';
@@ -51,7 +54,7 @@ import type {
   TaxonomyType
 } from './types';
 
-type TabKey = 'today' | 'import' | 'gallery' | 'calendar' | 'settings' | 'review';
+type TabKey = 'today' | 'import' | 'gallery' | 'calendar' | 'settings' | 'review' | 'edit';
 type SettingsPanel = 'taxonomy' | 'review' | 'backup' | 'storage';
 
 interface PendingImage {
@@ -87,9 +90,9 @@ const emptyDraft: MistakeDraft = {
 
 const newItemKey = () => `item-${crypto.randomUUID()}`;
 
-const createEmptyItem = (): ImportItem => ({
+const createEmptyItem = (defaults?: Partial<MistakeDraft>): ImportItem => ({
   itemKey: newItemKey(),
-  draft: { ...emptyDraft },
+  draft: { ...emptyDraft, ...defaults },
   questionImages: [],
   answerImages: []
 });
@@ -116,6 +119,11 @@ const pendingToDraftAsset = (image: PendingImage, role: ImageRole, itemKey: stri
 
 const draftAssetToPending = (asset: DraftImageAsset): PendingImage => {
   const file = new File([asset.imageBlob], asset.fileName, { type: asset.mimeType || asset.imageBlob.type || 'image/jpeg' });
+  return { id: asset.id, file, url: URL.createObjectURL(file) };
+};
+
+const imageAssetToPending = (asset: ImageAsset): PendingImage => {
+  const file = new File([asset.imageBlob], `edit-${asset.id}.jpg`, { type: asset.imageBlob.type || 'image/jpeg' });
   return { id: asset.id, file, url: URL.createObjectURL(file) };
 };
 
@@ -399,6 +407,317 @@ function ReviewFullscreen({
 }
 
 // ===== 上半段结束 =====
+// ========== 编辑页 ==========
+function EditView({
+  mistake,
+  images,
+  taxonomiesByType,
+  settings,
+  onSaved,
+  onCancel
+}: {
+  mistake: MistakeItem;
+  images: ImageAsset[];
+  taxonomiesByType: Record<TaxonomyType, TaxonomyOption[]>;
+  settings: AppSettings;
+  onSaved: () => Promise<void>;
+  onCancel: () => void;
+}) {
+  const questionInputRef = useRef<HTMLInputElement>(null);
+  const answerInputRef = useRef<HTMLInputElement>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [draft, setDraft] = useState<MistakeDraft>({
+    title: mistake.title,
+    note: mistake.note,
+    answer: mistake.answer,
+    inspiration: mistake.inspiration,
+    subjectId: mistake.subjectId,
+    causeId: mistake.causeId,
+    sourceId: mistake.sourceId,
+    sourceName: mistake.sourceName,
+    difficulty: mistake.difficulty
+  });
+  const [questionImages, setQuestionImages] = useState<PendingImage[]>([]);
+  const [answerImages, setAnswerImages] = useState<PendingImage[]>([]);
+  const loadedRef = useRef(false);
+
+  useEffect(() => {
+    if (loadedRef.current) return;
+    loadedRef.current = true;
+    const q = images.filter(img => (img.role ?? 'question') === 'question').map(imageAssetToPending);
+    const a = images.filter(img => img.role === 'answer').map(imageAssetToPending);
+    setQuestionImages(q);
+    setAnswerImages(a);
+    return () => {
+      releasePendingImages(q);
+      releasePendingImages(a);
+    };
+  }, [images]);
+
+  const addFiles = (files: File[], role: ImageRole) => {
+    const pending = files
+      .filter((file) => file.type.startsWith('image/'))
+      .map((file) => ({ id: crypto.randomUUID(), file, url: URL.createObjectURL(file) }));
+    if (!pending.length) return;
+    if (role === 'question') setQuestionImages(prev => [...prev, ...pending]);
+    else setAnswerImages(prev => [...prev, ...pending]);
+  };
+
+  const handlePickNative = async (role: ImageRole) => {
+    try {
+      const picked = await pickImagesFromDevice();
+      addFiles(picked, role);
+    } catch (err) {
+      if (role === 'question') questionInputRef.current?.click();
+      else answerInputRef.current?.click();
+      setError(err instanceof Error ? err.message : '相册打开失败');
+    }
+  };
+
+  const handleCamera = async (role: ImageRole) => {
+    try {
+      const photo = await takePhotoFromCamera();
+      addFiles([photo], role);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '拍照失败');
+    }
+  };
+
+  const removePending = (id: string, role: ImageRole) => {
+    if (role === 'question') {
+      setQuestionImages(prev => {
+        const target = prev.find(img => img.id === id);
+        if (target) URL.revokeObjectURL(target.url);
+        return prev.filter(img => img.id !== id);
+      });
+    } else {
+      setAnswerImages(prev => {
+        const target = prev.find(img => img.id === id);
+        if (target) URL.revokeObjectURL(target.url);
+        return prev.filter(img => img.id !== id);
+      });
+    }
+  };
+
+  const processImages = async (list: PendingImage[], role: ImageRole) => {
+    return Promise.all(list.map(async ({ file }) => {
+      const main = await compressImage(file, settings.imageMaxSize, settings.imageQuality);
+      const thumb = await compressImage(file, settings.thumbnailMaxSize, 0.78);
+      return { role, imageBlob: main.blob, thumbnailBlob: thumb.blob, width: main.width, height: main.height };
+    }));
+  };
+
+  const handleSave = async () => {
+    if (questionImages.length === 0) { setError('至少留一张题目图片'); return; }
+    if (!draft.subjectId || !draft.causeId || !draft.sourceName.trim()) {
+      setError('科目、错因、题源都要填写');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      const processed = [
+        ...(await processImages(questionImages, 'question')),
+        ...(await processImages(answerImages, 'answer'))
+      ];
+      await updateMistake(mistake.id, draft, processed);
+      releasePendingImages(questionImages);
+      releasePendingImages(answerImages);
+      await onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '保存失败');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      className="edit-shell"
+    >
+      <div className="edit-head">
+        <div>
+          <p className="eyebrow">编辑错题</p>
+          <h1>{draft.title || '未命名'}</h1>
+        </div>
+        <MotionTapButton type="button" className="icon-button" onClick={onCancel} aria-label="取消编辑">
+          <X size={18} />
+        </MotionTapButton>
+      </div>
+
+      <div className="import-page-inner">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div className="form-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <SegmentedControl
+              label="科目"
+              options={taxonomiesByType.subject.map(opt => ({ id: opt.id, name: opt.name }))}
+              value={draft.subjectId}
+              onChange={(val) => setDraft({ ...draft, subjectId: val })}
+            />
+            <SegmentedControl
+              label="错因"
+              options={taxonomiesByType.cause.map(opt => ({ id: opt.id, name: opt.name }))}
+              value={draft.causeId}
+              onChange={(val) => setDraft({ ...draft, causeId: val })}
+            />
+            <div className="field" style={{ gridColumn: '1 / -1' }}>
+              <span>题源</span>
+              <input
+                value={draft.sourceName}
+                placeholder="例如：一模试卷第12题"
+                onChange={(e) => setDraft({ ...draft, sourceName: e.target.value, sourceId: '' })}
+              />
+              <div className="choice-chips" style={{ marginTop: '6px' }}>
+                {taxonomiesByType.source.map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    className={`chip ${draft.sourceId === opt.id ? 'selected' : ''}`}
+                    onClick={() => setDraft({ ...draft, sourceId: opt.id, sourceName: opt.name })}
+                  >
+                    {opt.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <SegmentedControl
+              label="难度"
+              options={[
+                { id: 'hard', name: difficultyLabel.hard },
+                { id: 'medium', name: difficultyLabel.medium },
+                { id: 'easy', name: difficultyLabel.easy }
+              ]}
+              value={draft.difficulty}
+              onChange={(val) => setDraft({ ...draft, difficulty: val as Difficulty })}
+            />
+            <TextArea label="备注" value={draft.note} onChange={(note) => setDraft({ ...draft, note })} />
+            <TextArea label="启发" value={draft.inspiration} onChange={(inspiration) => setDraft({ ...draft, inspiration })} />
+          </div>
+        </div>
+
+        <div style={{
+          display: 'flex', flexDirection: 'column', gap: '16px',
+          background: 'rgba(255,255,255,0.25)', backdropFilter: 'blur(8px)',
+          borderRadius: 'var(--radius-control)', padding: '16px',
+          border: '1px solid rgba(255,255,255,0.2)'
+        }}>
+          <input ref={questionInputRef} hidden type="file" accept="image/*" multiple
+            onChange={(e) => addFiles(Array.from(e.target.files ?? []), 'question')} />
+          <input ref={answerInputRef} hidden type="file" accept="image/*" multiple
+            onChange={(e) => addFiles(Array.from(e.target.files ?? []), 'answer')} />
+
+          <TextInput label="标题" value={draft.title} placeholder="可不填"
+            onChange={(title) => setDraft({ ...draft, title })} />
+
+          <div className="field">
+            <span>题目图片</span>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+              <MotionTapButton type="button" onClick={() => handlePickNative('question')}
+                style={{ flex: 1, padding: '8px', borderRadius: 'var(--radius-control)', background: 'rgba(61,90,139,0.1)', border: '1px solid var(--line)', fontSize: '0.8rem' }}>
+                📷 相册
+              </MotionTapButton>
+              <MotionTapButton type="button" onClick={() => handleCamera('question')}
+                style={{ flex: 1, padding: '8px', borderRadius: 'var(--radius-control)', background: 'rgba(61,90,139,0.1)', border: '1px solid var(--line)', fontSize: '0.8rem' }}>
+                📸 拍照
+              </MotionTapButton>
+            </div>
+            <PreviewGrid images={questionImages} onRemove={(id) => removePending(id, 'question')} />
+          </div>
+
+          <AnswerField
+            value={draft.answer}
+            images={answerImages}
+            onChange={(answer) => setDraft({ ...draft, answer })}
+            onGallery={() => handlePickNative('answer')}
+            onCamera={() => handleCamera('answer')}
+            onRemove={(id) => removePending(id, 'answer')}
+          />
+
+          {error && <p className="form-error">{error}</p>}
+
+          <div style={{ display: 'flex', gap: '8px', marginTop: 4 }}>
+            <MotionTapButton
+              type="button"
+              onClick={onCancel}
+              className="edit-cancel-btn"
+            >
+              取消
+            </MotionTapButton>
+            <MotionTapButton
+              className="primary-action"
+              type="button"
+              disabled={saving}
+              onClick={handleSave}
+              style={{ flex: 1 }}
+            >
+              {saving ? '保存中' : '保存修改'}
+            </MotionTapButton>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+// ========== 删除确认弹窗 ==========
+function DeleteConfirmDialog({
+  open, title, onCancel, onConfirm
+}: {
+  open: boolean;
+  title: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+
+  const handleConfirm = async () => {
+    setBusy(true);
+    try { await onConfirm(); } finally { setBusy(false); }
+  };
+
+  const dialog = (
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          className="sheet-backdrop"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={fadeSlide}
+          onClick={onCancel}
+        >
+          <motion.div
+            className="confirm-dialog"
+            initial={{ opacity: 0, transform: 'translate3d(0, 18px, 0) scale(0.96)' }}
+            animate={{ opacity: 1, transform: 'translate3d(0, 0, 0) scale(1)' }}
+            exit={{ opacity: 0, transform: 'translate3d(0, 12px, 0) scale(0.96)' }}
+            transition={springSoft}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="confirm-title">删除这道错题？</h2>
+            <p className="confirm-desc">“{title}” 及它的图片、复习记录会被一起删掉，删除后无法恢复。</p>
+            <div className="confirm-actions">
+              <button type="button" className="confirm-btn confirm-cancel" onClick={onCancel} disabled={busy}>
+                取消
+              </button>
+              <button type="button" className="confirm-btn confirm-danger" onClick={handleConfirm} disabled={busy}>
+                {busy ? '删除中…' : '确认删除'}
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
+  return createPortal(dialog, document.body);
+}
+
+// ===== 下半段继续 =====
 // ========== App 主函数 ==========
 function App() {
   const reducedMotion = useReducedMotion();
@@ -412,6 +731,7 @@ function App() {
   const [bootError, setBootError] = useState('');
   const [importItems, setImportItems] = useState<ImportItem[]>(() => loadImportItems());
   const [importIndex, setImportIndex] = useState(0);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const importItemsRef = useRef<ImportItem[]>([]);
   const draftImagesLoadedRef = useRef(false);
 
@@ -524,6 +844,9 @@ function App() {
     .filter((item) => new Date(item.nextReviewAt).getTime() <= endOfToday().getTime())
     .sort((a, b) => new Date(a.nextReviewAt).getTime() - new Date(b.nextReviewAt).getTime());
 
+  const editingMistake = editingId ? mistakes.find((m) => m.id === editingId) ?? null : null;
+  const editingImages = editingId ? (imagesByMistake.get(editingId) ?? []) : [];
+
   const handleReviewed = async (mistake: MistakeItem, result: ReviewResult) => {
     await recordReview(mistake, result);
     await refresh();
@@ -533,6 +856,17 @@ function App() {
   const handleArchive = async (mistake: MistakeItem) => {
     await db.mistakes.update(mistake.id, { archived: !mistake.archived, updatedAt: new Date().toISOString() });
     await refresh();
+  };
+
+  const handleDelete = async (mistake: MistakeItem) => {
+    await deleteMistake(mistake.id);
+    await refresh();
+    setToast('已删除');
+  };
+
+  const handleEdit = (mistake: MistakeItem) => {
+    setEditingId(mistake.id);
+    setActiveTab('edit');
   };
 
   const handleImportBackup = async (file: File) => {
@@ -557,6 +891,29 @@ function App() {
         onReviewed={handleReviewed}
         onBack={() => setActiveTab('today')}
       />
+    );
+  }
+
+  if (activeTab === 'edit' && editingMistake) {
+    return (
+      <div className="app-shell">
+        <EditView
+          mistake={editingMistake}
+          images={editingImages}
+          taxonomiesByType={taxonomiesByType}
+          settings={settings}
+          onSaved={async () => {
+            await refresh();
+            setEditingId(null);
+            setActiveTab('gallery');
+            setToast('已保存修改');
+          }}
+          onCancel={() => {
+            setEditingId(null);
+            setActiveTab('gallery');
+          }}
+        />
+      </div>
     );
   }
 
@@ -609,6 +966,8 @@ function App() {
                 taxonomyMap={taxonomyMap}
                 taxonomiesByType={taxonomiesByType}
                 onArchive={handleArchive}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
               />
             )}
             {activeTab === 'calendar' && (
@@ -713,7 +1072,7 @@ function TodayView({
   );
 }
 
-// ===== ImportView（多题横滑 + 回弹 tab + 一键全部保存） =====
+// ===== ImportView（多题横滑 + 回弹 tab + 题源默认"作业"） =====
 function ImportView({
   settings, taxonomiesByType, items, currentIndex, onItemsChange, onIndexChange, onSaved
 }: {
@@ -736,21 +1095,25 @@ function ImportView({
 
   const defaultSubjectId = taxonomiesByType.subject[0]?.id || '';
   const defaultCauseId = taxonomiesByType.cause[0]?.id || '';
+  const homeworkOption = taxonomiesByType.source.find((s) => s.name === '作业');
+  const defaultSourceId = homeworkOption?.id || taxonomiesByType.source[0]?.id || '';
+  const defaultSourceName = homeworkOption?.name || taxonomiesByType.source[0]?.name || '作业';
 
   useEffect(() => {
-    if (!defaultSubjectId && !defaultCauseId) return;
+    if (!defaultSubjectId && !defaultCauseId && !defaultSourceId) return;
     onItemsChange((current) => current.map((it) => ({
       ...it,
       draft: {
         ...it.draft,
         subjectId: it.draft.subjectId || defaultSubjectId,
-        causeId: it.draft.causeId || defaultCauseId
+        causeId: it.draft.causeId || defaultCauseId,
+        sourceId: it.draft.sourceId || (it.draft.sourceName ? '' : defaultSourceId),
+        sourceName: it.draft.sourceName || defaultSourceName
       }
     })));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [defaultSubjectId, defaultCauseId]);
+  }, [defaultSubjectId, defaultCauseId, defaultSourceId]);
 
-  // 切题时让选中 tab 滚进视野
   useEffect(() => {
     const container = tabsRef.current;
     if (!container) return;
@@ -831,7 +1194,12 @@ function ImportView({
   };
 
   const addNewItem = () => {
-    onItemsChange((current) => [...current, createEmptyItem()]);
+    onItemsChange((current) => [...current, createEmptyItem({
+      subjectId: defaultSubjectId,
+      causeId: defaultCauseId,
+      sourceId: defaultSourceId,
+      sourceName: defaultSourceName
+    })]);
     const nextIndex = items.length;
     onIndexChange(nextIndex);
     window.setTimeout(() => {
@@ -923,7 +1291,12 @@ function ImportView({
         releasePendingImages(it.questionImages);
         releasePendingImages(it.answerImages);
       });
-      onItemsChange([createEmptyItem()]);
+      onItemsChange([createEmptyItem({
+        subjectId: defaultSubjectId,
+        causeId: defaultCauseId,
+        sourceId: defaultSourceId,
+        sourceName: defaultSourceName
+      })]);
       onIndexChange(0);
       window.localStorage.removeItem(IMPORT_ITEMS_KEY);
       await db.draftImages.clear();
@@ -994,7 +1367,6 @@ function ImportView({
         {items.map((item, index) => (
           <div className="import-page" key={item.itemKey}>
             <div className="import-page-inner">
-              {/* 左侧 7 */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <SectionHeading title={`第 ${index + 1} 题`} meta={`${item.questionImages.length + item.answerImages.length} 张图片`} />
                 <div className="form-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
@@ -1045,7 +1417,6 @@ function ImportView({
                 </div>
               </div>
 
-              {/* 右侧 3 */}
               <div style={{
                 display: 'flex', flexDirection: 'column', gap: '16px',
                 background: 'rgba(255,255,255,0.25)', backdropFilter: 'blur(8px)',
@@ -1120,21 +1491,23 @@ function ImportView({
     </div>
   );
 }
-
-// ===== GalleryView（内联筛选 + 回弹滑块） =====
+// ===== GalleryView（内联筛选 + 编辑/删除） =====
 function GalleryView({
-  mistakes, imagesByMistake, taxonomyMap, taxonomiesByType, onArchive
+  mistakes, imagesByMistake, taxonomyMap, taxonomiesByType, onArchive, onEdit, onDelete
 }: {
   mistakes: MistakeItem[];
   imagesByMistake: Map<string, ImageAsset[]>;
   taxonomyMap: Map<string, string>;
   taxonomiesByType: Record<TaxonomyType, TaxonomyOption[]>;
   onArchive: (mistake: MistakeItem) => Promise<void>;
+  onEdit: (mistake: MistakeItem) => void;
+  onDelete: (mistake: MistakeItem) => Promise<void>;
 }) {
   const [query, setQuery] = useState('');
   const [subjectId, setSubjectId] = useState('');
   const [causeId, setCauseId] = useState('');
   const [difficulty, setDifficulty] = useState('');
+  const [pendingDelete, setPendingDelete] = useState<MistakeItem | null>(null);
 
   const difficultyOptions = (['hard', 'medium', 'easy'] as Difficulty[]).map((item) => ({
     id: item,
@@ -1150,6 +1523,10 @@ function GalleryView({
       (!difficulty || mistake.difficulty === difficulty)
     );
   });
+
+  const pendingTitle = pendingDelete
+    ? (pendingDelete.title.trim() || '这道错题')
+    : '这道错题';
 
   return (
     <motion.div
@@ -1198,23 +1575,31 @@ function GalleryView({
         />
       </div>
 
-      <div style={{
-        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px',
-        overflow: 'auto', maxHeight: '70vh'
-      }}>
+      <div className="gallery-grid">
         {filtered.map((mistake) => (
           <MistakeCard
             key={mistake.id}
             mistake={mistake}
-            compact
             images={imagesByMistake.get(mistake.id) ?? []}
             taxonomyMap={taxonomyMap}
             onArchive={onArchive}
+            onEdit={onEdit}
+            onRequestDelete={() => setPendingDelete(mistake)}
           />
         ))}
       </div>
 
       {filtered.length === 0 && <EmptyState icon={<MoreHorizontal />} title="没找到" text="换个筛选试试。" />}
+
+      <DeleteConfirmDialog
+        open={!!pendingDelete}
+        title={pendingTitle}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={async () => {
+          if (pendingDelete) await onDelete(pendingDelete);
+          setPendingDelete(null);
+        }}
+      />
     </motion.div>
   );
 }
@@ -1473,7 +1858,7 @@ function CalendarView({
       </motion.div>
       <div className="stack">
         {selectedMistakes.map((mistake) => (
-          <MistakeCard key={mistake.id} mistake={mistake} compact images={imagesByMistake.get(mistake.id) ?? []} taxonomyMap={taxonomyMap} />
+          <MistakeCard key={mistake.id} mistake={mistake} images={imagesByMistake.get(mistake.id) ?? []} taxonomyMap={taxonomyMap} />
         ))}
         {selectedMistakes.length === 0 && <EmptyState icon={<CalendarDays />} title="这天没有安排" text="日历会随着复习自动变化。" />}
       </div>
@@ -1660,9 +2045,9 @@ function TaxonomyEditor({ item, onRefresh }: { item: TaxonomyOption; onRefresh: 
   );
 }
 
-// ===== MistakeCard =====
+// ===== MistakeCard（带编辑/删除按钮） =====
 function MistakeCard({
-  mistake, images, taxonomyMap, compact = false, footer, onArchive
+  mistake, images, taxonomyMap, compact = false, footer, onArchive, onEdit, onRequestDelete
 }: {
   mistake: MistakeItem;
   images: ImageAsset[];
@@ -1670,6 +2055,8 @@ function MistakeCard({
   compact?: boolean;
   footer?: JSX.Element;
   onArchive?: (mistake: MistakeItem) => Promise<void>;
+  onEdit?: (mistake: MistakeItem) => void;
+  onRequestDelete?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const subjectName = (taxonomyMap.get(mistake.subjectId) ?? mistake.subjectName) || '科目';
@@ -1697,11 +2084,23 @@ function MistakeCard({
             <span>{formatShortDate(mistake.nextReviewAt)}</span>
           </div>
         </div>
-        {onArchive && (
-          <MotionTapButton type="button" className="icon-button" onClick={() => onArchive(mistake)} aria-label="归档">
-            <Archive size={18} />
-          </MotionTapButton>
-        )}
+        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+          {onEdit && (
+            <MotionTapButton type="button" className="icon-button icon-edit" onClick={() => onEdit(mistake)} aria-label="编辑">
+              <Pencil size={17} />
+            </MotionTapButton>
+          )}
+          {onRequestDelete && (
+            <MotionTapButton type="button" className="icon-button icon-delete" onClick={onRequestDelete} aria-label="删除">
+              <Trash2 size={17} />
+            </MotionTapButton>
+          )}
+          {onArchive && (
+            <MotionTapButton type="button" className="icon-button" onClick={() => onArchive(mistake)} aria-label="归档">
+              <Archive size={18} />
+            </MotionTapButton>
+          )}
+        </div>
       </div>
       <ImageStrip images={questionImages} />
       {mistake.note && <p className="note">{mistake.note}</p>}
