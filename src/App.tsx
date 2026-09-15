@@ -486,7 +486,7 @@ function ImageLightbox({ image, onClose }: { image: { src: string; title: string
   return createPortal(node, document.body);
 }
 
-// ===== 沉浸式复习 =====
+// ===== 沉浸式复习（7:3 布局；显示答案后左区内部 5:5；右栏题号滑块一排 3 个） =====
 function ReviewFullscreen({
   kind, subjectName, mistakes, imagesByMistake, initialProgress, onAnswered, onSaveProgress, onExit, onClearSession, onToast
 }: {
@@ -614,42 +614,38 @@ function ReviewFullscreen({
 
   return (
     <div className="review-shell">
-      <header className="review-topbar">
-        <div className="review-topbar-left">
+      {/* ===== 左侧 7 ===== */}
+      <div className="review-left">
+        <header className="review-left-head">
           <span className="review-kind">
             {kind === 'exam' ? `备考${subjectName ? ' · ' + subjectName : ''}` : '今日复习'}
           </span>
           <span className="review-progress">{safeIndex + 1} / {total}</span>
-        </div>
-        <button ref={exitBtnRef} className="review-exit-btn" type="button" onClick={handleExitClick}>
-          退出复习
-        </button>
-      </header>
+        </header>
 
-      <div className="review-stage">
-        <AnimatePresence initial={false} custom={direction} mode="wait">
-          <motion.div
-            key={current.id}
-            custom={direction}
-            initial={{ opacity: 0, x: direction >= 0 ? 64 : -64 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: direction >= 0 ? -64 : 64 }}
-            transition={{ type: 'spring', stiffness: 320, damping: 30, mass: 0.7 }}
-            drag="x"
-            dragConstraints={{ left: 0, right: 0 }}
-            dragElastic={0.22}
-            onDragEnd={(_, info) => {
-              const offset = info.offset.x;
-              const velocity = info.velocity.x;
-              if (offset < -80 || velocity < -450) {
-                if (safeIndex + 1 < total) goTo(safeIndex + 1);
-              } else if (offset > 80 || velocity > 450) {
-                if (safeIndex > 0) goTo(safeIndex - 1);
-              }
-            }}
-            className="review-card"
-          >
-            <div className={`review-card-body ${showAnswer ? 'with-answer' : ''}`}>
+        <div className="review-content-area">
+          <AnimatePresence initial={false} custom={direction} mode="wait">
+            <motion.div
+              key={current.id}
+              custom={direction}
+              initial={{ opacity: 0, x: direction >= 0 ? 64 : -64 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: direction >= 0 ? -64 : 64 }}
+              transition={{ type: 'spring', stiffness: 320, damping: 30, mass: 0.7 }}
+              drag="x"
+              dragConstraints={{ left: 0, right: 0 }}
+              dragElastic={0.22}
+              onDragEnd={(_, info) => {
+                const offset = info.offset.x;
+                const velocity = info.velocity.x;
+                if (offset < -80 || velocity < -450) {
+                  if (safeIndex + 1 < total) goTo(safeIndex + 1);
+                } else if (offset > 80 || velocity > 450) {
+                  if (safeIndex > 0) goTo(safeIndex - 1);
+                }
+              }}
+              className={`review-card-body ${showAnswer ? 'with-answer' : ''}`}
+            >
               <div className="review-question-area">
                 <h2 className="review-card-title">题目</h2>
                 {current.title && <div className="review-card-text">{current.title}</div>}
@@ -691,69 +687,80 @@ function ReviewFullscreen({
                   )}
                 </div>
               )}
-            </div>
-          </motion.div>
-        </AnimatePresence>
-      </div>
-
-      <div className="review-action-row">
-        {!showAnswer ? (
-          <button type="button" className="review-show-answer-btn" onClick={() => setShowAnswer(true)}>
-            📖 显示答案
-          </button>
-        ) : (
-          <div className="review-result-row">
-            {(['forgot', 'struggled', 'remembered', 'mastered'] as ReviewResult[]).map((r) => (
-              <button
-                key={r}
-                type="button"
-                className={`review-result-btn review-result-${r}`}
-                onClick={() => handleAnswered(r)}
-              >
-                {reviewResultLabel[r]}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <footer className="review-pager">
-        <button
-          type="button"
-          className="review-page-arrow"
-          disabled={page === 0}
-          onClick={() => { const p = Math.max(0, page - 1); setPage(p); goTo(p * PAGE_SIZE); }}
-        >‹</button>
-        <div className="review-page-numbers">
-          {pageIndexes.map((i) => {
-            const isActive = i === safeIndex;
-            const isAnswered = !!answeredResults[mistakes[i].id];
-            return (
-              <button
-                key={i}
-                type="button"
-                className={`review-page-num ${isActive ? 'active' : ''} ${isAnswered ? 'answered' : ''}`}
-                onClick={() => goTo(i)}
-              >
-                {isActive && (
-                  <motion.span
-                    layoutId="review-num-pill"
-                    className="review-num-pill"
-                    transition={numPillTransition}
-                  />
-                )}
-                <span className="review-num-label">{i + 1}</span>
-              </button>
-            );
-          })}
+            </motion.div>
+          </AnimatePresence>
         </div>
-        <button
-          type="button"
-          className="review-page-arrow"
-          disabled={page >= totalPages - 1}
-          onClick={() => { const p = Math.min(totalPages - 1, page + 1); setPage(p); goTo(p * PAGE_SIZE); }}
-        >›</button>
-      </footer>
+
+        <div className="review-action-row">
+          {!showAnswer ? (
+            <button type="button" className="review-show-answer-btn" onClick={() => setShowAnswer(true)}>
+              📖 显示答案
+            </button>
+          ) : (
+            <div className="review-result-row">
+              {(['forgot', 'struggled', 'remembered', 'mastered'] as ReviewResult[]).map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  className={`review-result-btn review-result-${r}`}
+                  onClick={() => handleAnswered(r)}
+                >
+                  {reviewResultLabel[r]}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ===== 右侧 3 ===== */}
+      <div className="review-right">
+        <div className="review-right-body">
+          <h3 className="review-right-title">题号</h3>
+          <div className="review-page-numbers">
+            {pageIndexes.map((i) => {
+              const isActive = i === safeIndex;
+              const isAnswered = !!answeredResults[mistakes[i].id];
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  className={`review-page-num ${isActive ? 'active' : ''} ${isAnswered ? 'answered' : ''}`}
+                  onClick={() => goTo(i)}
+                >
+                  {isActive && (
+                    <motion.span
+                      layoutId="review-num-pill"
+                      className="review-num-pill"
+                      transition={numPillTransition}
+                    />
+                  )}
+                  <span className="review-num-label">{i + 1}</span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="review-page-arrows">
+            <button
+              type="button"
+              className="review-page-arrow"
+              disabled={page === 0}
+              onClick={() => { const p = Math.max(0, page - 1); setPage(p); goTo(p * PAGE_SIZE); }}
+            >‹</button>
+            <span className="review-page-indicator">{page + 1} / {totalPages}</span>
+            <button
+              type="button"
+              className="review-page-arrow"
+              disabled={page >= totalPages - 1}
+              onClick={() => { const p = Math.min(totalPages - 1, page + 1); setPage(p); goTo(p * PAGE_SIZE); }}
+            >›</button>
+          </div>
+        </div>
+
+        <button ref={exitBtnRef} className="review-exit-btn" type="button" onClick={handleExitClick}>
+          退出复习
+        </button>
+      </div>
 
       <AnchorDialog open={exitOpen} anchorRect={exitAnchor} onCancel={() => setExitOpen(false)}>
         <div className="anchor-dialog-title">退出复习</div>
@@ -1732,7 +1739,7 @@ function ImportView({
         {items.map((item, index) => (
           <div className="import-page" key={item.itemKey}>
             <div className="import-page-inner">
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div className="import-left-col">
                 <SectionHeading title={`第 ${index + 1} 题`} meta={`${item.questionImages.length + item.answerImages.length} 张图片`} />
                 <div className="form-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <SegmentedControl
@@ -1747,7 +1754,7 @@ function ImportView({
                     value={item.draft.causeId}
                     onChange={(val) => updateDraft(index, { causeId: val })}
                   />
-                  <div style={{ gridColumn: '1 / -1' }}>
+                  <div className="field full">
                     <SegmentedControl
                       label="题源"
                       options={sourceOptions}
@@ -2125,7 +2132,7 @@ function EditView({
         </div>
 
         <div className="import-page-inner">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div className="import-left-col">
             <div className="form-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <SegmentedControl
                 label="科目"
@@ -2139,7 +2146,7 @@ function EditView({
                 value={draft.causeId}
                 onChange={(val) => setDraft({ ...draft, causeId: val })}
               />
-              <div style={{ gridColumn: '1 / -1' }}>
+              <div className="field full">
                 <SegmentedControl
                   label="题源"
                   options={sourceOptions}
