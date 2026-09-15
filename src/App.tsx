@@ -3,70 +3,28 @@ import type { ComponentProps, Dispatch, ReactNode, SetStateAction } from 'react'
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import {
-  Archive,
-  BookOpen,
-  CalendarDays,
-  Camera,
-  Check,
-  ChevronDown,
-  Database,
-  Download,
-  GraduationCap,
-  ImagePlus,
-  Images,
-  MoreHorizontal,
-  Pencil,
-  Plus,
-  RotateCcw,
-  Search,
-  Settings,
-  SlidersHorizontal,
-  Tags,
-  Trash2,
-  X,
+  Archive, BookOpen, CalendarDays, Camera, Check, ChevronDown, Database, Download,
+  GraduationCap, ImagePlus, Images, MoreHorizontal, Pencil, Plus, RotateCcw, Search,
+  Settings, SlidersHorizontal, Tags, Trash2, X,
 } from 'lucide-react';
 import {
-  addMistake,
-  addTaxonomy,
-  db,
-  deleteMistake,
-  deleteTaxonomy,
-  ensureSeedData,
-  getSettings,
-  recordReview,
-  renameTaxonomy,
-  updateMistake,
-  updateSettings
+  addMistake, addTaxonomy, db, deleteMistake, deleteTaxonomy, ensureSeedData, getSettings,
+  recordReview, renameTaxonomy, updateMistake, updateSettings
 } from './data/db';
 import { exportBackup, importBackup } from './data/backup';
 import { compressImage, pickImagesFromDevice, takePhotoFromCamera } from './lib/images';
 import { difficultyLabel, getReviewPlan, reviewResultLabel } from './lib/review';
 import { endOfToday, formatShortDate, startOfToday, toDateKey } from './lib/dates';
 import type {
-  AppSettings,
-  DraftImageAsset,
-  Difficulty,
-  ExamOrderBy,
-  ImageAsset,
-  ImageRole,
-  MistakeDraft,
-  MistakeItem,
-  ReviewResult,
-  ReviewSessionKind,
-  ReviewSessionProgress,
-  TaxonomyOption,
-  TaxonomyType
+  AppSettings, DraftImageAsset, Difficulty, ExamOrderBy, ImageAsset, ImageRole,
+  MistakeDraft, MistakeItem, ReviewResult, ReviewSessionKind, ReviewSessionProgress,
+  TaxonomyOption, TaxonomyType
 } from './types';
 
 type TabKey = 'today' | 'import' | 'gallery' | 'calendar' | 'settings' | 'review' | 'edit';
 type SettingsPanel = 'taxonomy' | 'review' | 'backup' | 'storage';
 
-interface PendingImage {
-  id: string;
-  file: File;
-  url: string;
-}
-
+interface PendingImage { id: string; file: File; url: string; }
 interface ImportItem {
   itemKey: string;
   draft: MistakeDraft;
@@ -74,26 +32,14 @@ interface ImportItem {
   answerImages: PendingImage[];
 }
 
-const taxonomyTitles: Record<TaxonomyType, string> = {
-  subject: '科目',
-  cause: '错因',
-  source: '题源快捷项'
-};
+const taxonomyTitles: Record<TaxonomyType, string> = { subject: '科目', cause: '错因', source: '题源快捷项' };
 
 const emptyDraft: MistakeDraft = {
-  title: '',
-  note: '',
-  answer: '',
-  inspiration: '',
-  subjectId: '',
-  causeId: '',
-  sourceId: '',
-  sourceName: '',
-  difficulty: 'medium'
+  title: '', note: '', answer: '', inspiration: '',
+  subjectId: '', causeId: '', sourceId: '', sourceName: '', difficulty: 'medium'
 };
 
 const newItemKey = () => `item-${crypto.randomUUID()}`;
-
 const createEmptyItem = (defaults?: Partial<MistakeDraft>): ImportItem => ({
   itemKey: newItemKey(),
   draft: { ...emptyDraft, ...defaults },
@@ -115,12 +61,8 @@ const releasePendingImages = (list: PendingImage[]) => {
 };
 
 const pendingToDraftAsset = (image: PendingImage, role: ImageRole, itemKey: string): DraftImageAsset => ({
-  id: image.id,
-  itemKey,
-  role,
-  imageBlob: image.file,
-  fileName: image.file.name,
-  mimeType: image.file.type || 'image/jpeg',
+  id: image.id, itemKey, role, imageBlob: image.file,
+  fileName: image.file.name, mimeType: image.file.type || 'image/jpeg',
   createdAt: new Date().toISOString()
 });
 
@@ -143,8 +85,7 @@ const loadImportItems = (): ImportItem[] => {
         return parsed.map((item) => ({
           itemKey: item.itemKey || newItemKey(),
           draft: { ...emptyDraft, ...item.draft },
-          questionImages: [],
-          answerImages: []
+          questionImages: [], answerImages: []
         }));
       }
     }
@@ -153,9 +94,7 @@ const loadImportItems = (): ImportItem[] => {
       const draft = JSON.parse(legacy) as MistakeDraft;
       return [{ itemKey: newItemKey(), draft: { ...emptyDraft, ...draft }, questionImages: [], answerImages: [] }];
     }
-  } catch {
-    // ignore
-  }
+  } catch {}
   return [createEmptyItem()];
 };
 
@@ -167,27 +106,21 @@ const loadSession = (kind: ReviewSessionKind): ReviewSessionProgress | null => {
     const parsed = JSON.parse(raw) as ReviewSessionProgress;
     if (!parsed || !Array.isArray(parsed.mistakeIds)) return null;
     return parsed;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 };
 
 const saveSession = (session: ReviewSessionProgress) => {
   try {
     const key = session.kind === 'normal' ? NORMAL_SESSION_KEY : EXAM_SESSION_KEY;
     window.localStorage.setItem(key, JSON.stringify(session));
-  } catch (err) {
-    console.error('保存复习会话失败', err);
-  }
+  } catch (err) { console.error('保存复习会话失败', err); }
 };
 
 const clearSession = (kind: ReviewSessionKind) => {
   try {
     const key = kind === 'normal' ? NORMAL_SESSION_KEY : EXAM_SESSION_KEY;
     window.localStorage.removeItem(key);
-  } catch {
-    // ignore
-  }
+  } catch {}
 };
 
 const shuffleArray = <T,>(arr: T[]): T[] => {
@@ -199,15 +132,10 @@ const shuffleArray = <T,>(arr: T[]): T[] => {
   return next;
 };
 
-// ===== 通用锚定弹窗 =====
+// ===== 锚定弹窗 =====
 function AnchorDialog({
   open, anchorRect, onCancel, children
-}: {
-  open: boolean;
-  anchorRect: DOMRect | null;
-  onCancel: () => void;
-  children: ReactNode;
-}) {
+}: { open: boolean; anchorRect: DOMRect | null; onCancel: () => void; children: ReactNode }) {
   const [pos, setPos] = useState<{ left: number; top: number; transform: string }>({
     left: 0, top: 0, transform: 'translate(-50%, -100%)'
   });
@@ -218,48 +146,29 @@ function AnchorDialog({
     const vh = window.innerHeight;
     const dialogWidth = Math.min(360, vw - 32);
     const margin = 12;
-
     let left = anchorRect.left + anchorRect.width / 2;
     left = Math.max(dialogWidth / 2 + 16, Math.min(vw - dialogWidth / 2 - 16, left));
-
     const spaceAbove = anchorRect.top;
     const spaceBelow = vh - anchorRect.bottom;
     const preferAbove = spaceAbove >= spaceBelow;
-
     const top = preferAbove ? anchorRect.top - margin : anchorRect.bottom + margin;
     const transform = preferAbove ? 'translate(-50%, -100%)' : 'translate(-50%, 0)';
-
     setPos({ left, top, transform });
   }, [open, anchorRect]);
 
   const dialog = (
     <AnimatePresence>
       {open && (
-        <motion.div
-          className="dialog-blur-backdrop"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.15 }}
-          onClick={onCancel}
-        >
-          <div
-            className="anchor-dialog"
+        <motion.div className="dialog-blur-backdrop"
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }} onClick={onCancel}>
+          <div className="anchor-dialog"
             style={{
-              position: 'fixed',
-              left: pos.left,
-              top: pos.top,
-              transform: pos.transform,
+              position: 'fixed', left: pos.left, top: pos.top, transform: pos.transform,
               width: 'min(360px, calc(100vw - 32px))'
             }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.96 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.96 }}
-              transition={{ duration: 0.15 }}
-            >
+            onClick={(e) => e.stopPropagation()}>
+            <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }} transition={{ duration: 0.15 }}>
               {children}
             </motion.div>
           </div>
@@ -267,37 +176,25 @@ function AnchorDialog({
       )}
     </AnimatePresence>
   );
-
   return createPortal(dialog, document.body);
 }
 
 // ===== 居中弹窗 =====
 function CenterDialog({
   open, onCancel, children
-}: {
-  open: boolean;
-  onCancel: () => void;
-  children: ReactNode;
-}) {
+}: { open: boolean; onCancel: () => void; children: ReactNode }) {
   const dialog = (
     <AnimatePresence>
       {open && (
-        <motion.div
-          className="dialog-blur-backdrop"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.15 }}
-          onClick={onCancel}
-        >
-          <motion.div
-            className="center-dialog"
+        <motion.div className="dialog-blur-backdrop"
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }} onClick={onCancel}>
+          <motion.div className="center-dialog"
             initial={{ opacity: 0, scale: 0.95, x: '-50%', y: '-50%' }}
             animate={{ opacity: 1, scale: 1, x: '-50%', y: '-50%' }}
             exit={{ opacity: 0, scale: 0.95, x: '-50%', y: '-50%' }}
             transition={{ duration: 0.18 }}
-            onClick={(e) => e.stopPropagation()}
-          >
+            onClick={(e) => e.stopPropagation()}>
             {children}
           </motion.div>
         </motion.div>
@@ -310,12 +207,7 @@ function CenterDialog({
 // ===== 分段控制器 =====
 function SegmentedControl<T extends string>({
   options, value, onChange, label
-}: {
-  options: { id: T; name: string }[];
-  value: T;
-  onChange: (val: T) => void;
-  label?: string;
-}) {
+}: { options: { id: T; name: string }[]; value: T; onChange: (val: T) => void; label?: string; }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [sliderStyle, setSliderStyle] = useState({ left: 0, top: 0, width: 0, height: 0 });
   const [isReady, setIsReady] = useState(false);
@@ -332,8 +224,7 @@ function SegmentedControl<T extends string>({
     setSliderStyle({
       left: rect.left - containerRect.left,
       top: rect.top - containerRect.top,
-      width: rect.width,
-      height: rect.height,
+      width: rect.width, height: rect.height,
     });
     setIsReady(true);
   };
@@ -341,10 +232,7 @@ function SegmentedControl<T extends string>({
   useEffect(() => {
     const timeout = setTimeout(updateSlider, 20);
     window.addEventListener('resize', updateSlider);
-    return () => {
-      clearTimeout(timeout);
-      window.removeEventListener('resize', updateSlider);
-    };
+    return () => { clearTimeout(timeout); window.removeEventListener('resize', updateSlider); };
   }, [value, options]);
 
   useEffect(() => { updateSlider(); }, [options]);
@@ -354,34 +242,20 @@ function SegmentedControl<T extends string>({
       {label && <span>{label}</span>}
       <div ref={containerRef} className="segmented-wrap">
         {isReady && (
-          <motion.div
-            layoutId={id.current}
-            transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+          <motion.div layoutId={id.current} transition={{ type: 'spring', stiffness: 500, damping: 30 }}
             className="segmented-slider"
-            style={{
-              left: sliderStyle.left,
-              top: sliderStyle.top,
-              width: sliderStyle.width,
-              height: sliderStyle.height,
-            }}
-          />
+            style={{ left: sliderStyle.left, top: sliderStyle.top, width: sliderStyle.width, height: sliderStyle.height }} />
         )}
         {options.map((opt) => (
-          <button
-            key={opt.id}
-            className={`segmented-option ${value === opt.id ? 'selected' : ''}`}
-            onClick={() => onChange(opt.id)}
-          >
-            {opt.name}
-          </button>
+          <button key={opt.id} className={`segmented-option ${value === opt.id ? 'selected' : ''}`}
+            onClick={() => onChange(opt.id)}>{opt.name}</button>
         ))}
       </div>
     </div>
   );
 }
 
-// ===== 第 1 段结束 =====
-    // ===== 图片放大镜 =====
+// ===== 图片放大镜 =====
 function ImageLightbox({ image, onClose }: { image: { src: string; title: string } | null; onClose: () => void }) {
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -402,10 +276,8 @@ function ImageLightbox({ image, onClose }: { image: { src: string; title: string
 
   useEffect(() => {
     if (!image) return;
-    setScale(1);
-    setOffset({ x: 0, y: 0 });
-    pinchRef.current = null;
-    panRef.current = null;
+    setScale(1); setOffset({ x: 0, y: 0 });
+    pinchRef.current = null; panRef.current = null;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -415,28 +287,17 @@ function ImageLightbox({ image, onClose }: { image: { src: string; title: string
 
   const node = (
     <AnimatePresence>
-      <motion.div
-        className="lightbox"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={fadeSlide}
-      >
+      <motion.div className="lightbox" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={fadeSlide}>
         <div className="lightbox-toolbar">
           <button type="button" onClick={() => updateScale((v) => v - 0.25)}>缩小</button>
           <span>{Math.round(scale * 100)}%</span>
           <button type="button" onClick={() => updateScale((v) => v + 0.25)}>放大</button>
           <button type="button" className="lightbox-close" onClick={onClose}>关闭</button>
         </div>
-        <div
-          className="lightbox-stage"
+        <div className="lightbox-stage"
           onWheel={(e) => { e.preventDefault(); updateScale((v) => v + (e.deltaY < 0 ? 0.15 : -0.15)); }}
           onTouchStart={(e) => {
-            if (e.touches.length === 2) {
-              pinchRef.current = { distance: touchDistance(e.touches), scale };
-              panRef.current = null;
-              return;
-            }
+            if (e.touches.length === 2) { pinchRef.current = { distance: touchDistance(e.touches), scale }; panRef.current = null; return; }
             if (e.touches.length === 1 && scale > 1) {
               const t = e.touches[0];
               panRef.current = { x: t.clientX, y: t.clientY, offsetX: offset.x, offsetY: offset.y };
@@ -452,41 +313,27 @@ function ImageLightbox({ image, onClose }: { image: { src: string; title: string
             if (e.touches.length !== 1 || !panRef.current || scale <= 1) return;
             e.preventDefault();
             const t = e.touches[0];
-            setOffset({
-              x: panRef.current.offsetX + t.clientX - panRef.current.x,
-              y: panRef.current.offsetY + t.clientY - panRef.current.y
-            });
+            setOffset({ x: panRef.current.offsetX + t.clientX - panRef.current.x, y: panRef.current.offsetY + t.clientY - panRef.current.y });
           }}
           onTouchEnd={() => { pinchRef.current = null; panRef.current = null; }}
-          onMouseDown={(e) => {
-            if (scale <= 1) return;
-            panRef.current = { x: e.clientX, y: e.clientY, offsetX: offset.x, offsetY: offset.y };
-          }}
+          onMouseDown={(e) => { if (scale <= 1) return; panRef.current = { x: e.clientX, y: e.clientY, offsetX: offset.x, offsetY: offset.y }; }}
           onMouseMove={(e) => {
             if (!panRef.current || scale <= 1) return;
-            setOffset({
-              x: panRef.current.offsetX + e.clientX - panRef.current.x,
-              y: panRef.current.offsetY + e.clientY - panRef.current.y
-            });
+            setOffset({ x: panRef.current.offsetX + e.clientX - panRef.current.x, y: panRef.current.offsetY + e.clientY - panRef.current.y });
           }}
           onMouseUp={() => { panRef.current = null; }}
-          onMouseLeave={() => { panRef.current = null; }}
-        >
-          <img
-            src={image.src}
-            alt={image.title}
+          onMouseLeave={() => { panRef.current = null; }}>
+          <img src={image.src} alt={image.title}
             className={scale > 1 ? 'pannable' : ''}
-            style={{ transform: `translate3d(${offset.x}px, ${offset.y}px, 0) scale(${scale})` }}
-          />
+            style={{ transform: `translate3d(${offset.x}px, ${offset.y}px, 0) scale(${scale})` }} />
         </div>
       </motion.div>
     </AnimatePresence>
   );
-
   return createPortal(node, document.body);
 }
 
-// ===== 沉浸式复习（7:3 布局；显示答案后左区内部 5:5；右栏题号滑块一排 3 个） =====
+// ===== 沉浸式复习 =====
 function ReviewFullscreen({
   kind, subjectName, mistakes, imagesByMistake, initialProgress, onAnswered, onSaveProgress, onExit, onClearSession, onToast
 }: {
@@ -525,12 +372,8 @@ function ReviewFullscreen({
   useEffect(() => {
     const qs = questionImages.map(img => URL.createObjectURL(img.imageBlob));
     const as = answerImages.map(img => URL.createObjectURL(img.imageBlob));
-    setQuestionUrls(qs);
-    setAnswerUrls(as);
-    return () => {
-      qs.forEach(u => URL.revokeObjectURL(u));
-      as.forEach(u => URL.revokeObjectURL(u));
-    };
+    setQuestionUrls(qs); setAnswerUrls(as);
+    return () => { qs.forEach(u => URL.revokeObjectURL(u)); as.forEach(u => URL.revokeObjectURL(u)); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [imageKey]);
 
@@ -565,7 +408,6 @@ function ReviewFullscreen({
     const nextAnswered = { ...answeredResults, [current.id]: result };
     setAnsweredResults(nextAnswered);
     setShowAnswer(false);
-
     const allAnswered = mistakes.every(m => nextAnswered[m.id]);
     if (allAnswered) {
       onClearSession(kind);
@@ -573,30 +415,19 @@ function ReviewFullscreen({
       window.setTimeout(() => onExit(), 350);
       return;
     }
-
-    if (safeIndex + 1 < total) {
-      window.setTimeout(() => goTo(safeIndex + 1), 220);
-    }
+    if (safeIndex + 1 < total) window.setTimeout(() => goTo(safeIndex + 1), 220);
   };
 
   const handleExitClick = () => {
-    if (exitBtnRef.current) {
-      setExitAnchor(exitBtnRef.current.getBoundingClientRect());
-    }
+    if (exitBtnRef.current) setExitAnchor(exitBtnRef.current.getBoundingClientRect());
     setExitOpen(true);
   };
 
   const handleSaveAndExit = () => {
     onSaveProgress({
-      kind,
-      subjectId: initialProgress?.subjectId,
-      subjectName,
-      orderBy: initialProgress?.orderBy,
-      mistakeIds: mistakes.map(m => m.id),
-      currentIndex: safeIndex,
-      currentPage: page,
-      answeredResults,
-      startedAt: initialProgress?.startedAt ?? new Date().toISOString(),
+      kind, subjectId: initialProgress?.subjectId, subjectName, orderBy: initialProgress?.orderBy,
+      mistakeIds: mistakes.map(m => m.id), currentIndex: safeIndex, currentPage: page,
+      answeredResults, startedAt: initialProgress?.startedAt ?? new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
     setExitOpen(false);
@@ -614,7 +445,6 @@ function ReviewFullscreen({
 
   return (
     <div className="review-shell">
-      {/* ===== 左侧 7 ===== */}
       <div className="review-left">
         <header className="review-left-head">
           <span className="review-kind">
@@ -625,40 +455,27 @@ function ReviewFullscreen({
 
         <div className="review-content-area">
           <AnimatePresence initial={false} custom={direction} mode="wait">
-            <motion.div
-              key={current.id}
-              custom={direction}
+            <motion.div key={current.id} custom={direction}
               initial={{ opacity: 0, x: direction >= 0 ? 64 : -64 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: direction >= 0 ? -64 : 64 }}
               transition={{ type: 'spring', stiffness: 320, damping: 30, mass: 0.7 }}
-              drag="x"
-              dragConstraints={{ left: 0, right: 0 }}
-              dragElastic={0.22}
+              drag="x" dragConstraints={{ left: 0, right: 0 }} dragElastic={0.22}
               onDragEnd={(_, info) => {
                 const offset = info.offset.x;
                 const velocity = info.velocity.x;
-                if (offset < -80 || velocity < -450) {
-                  if (safeIndex + 1 < total) goTo(safeIndex + 1);
-                } else if (offset > 80 || velocity > 450) {
-                  if (safeIndex > 0) goTo(safeIndex - 1);
-                }
+                if (offset < -80 || velocity < -450) { if (safeIndex + 1 < total) goTo(safeIndex + 1); }
+                else if (offset > 80 || velocity > 450) { if (safeIndex > 0) goTo(safeIndex - 1); }
               }}
-              className={`review-card-body ${showAnswer ? 'with-answer' : ''}`}
-            >
+              className={`review-card-body ${showAnswer ? 'with-answer' : ''}`}>
               <div className="review-question-area">
                 <h2 className="review-card-title">题目</h2>
                 {current.title && <div className="review-card-text">{current.title}</div>}
                 {questionUrls.length > 0 && (
                   <div className="review-image-wrap">
                     {questionUrls.map((url, i) => (
-                      <img
-                        key={i}
-                        src={url}
-                        alt={`题目图片 ${i + 1}`}
-                        className="review-image"
-                        onClick={() => setPreview({ src: url, title: `题目图片 ${i + 1}` })}
-                      />
+                      <img key={i} src={url} alt={`题目图片 ${i + 1}`} className="review-image"
+                        onClick={() => setPreview({ src: url, title: `题目图片 ${i + 1}` })} />
                     ))}
                   </div>
                 )}
@@ -670,13 +487,8 @@ function ReviewFullscreen({
                   {answerUrls.length > 0 ? (
                     <div className="review-image-wrap">
                       {answerUrls.map((url, i) => (
-                        <img
-                          key={i}
-                          src={url}
-                          alt={`答案图片 ${i + 1}`}
-                          className="review-image"
-                          onClick={() => setPreview({ src: url, title: `答案图片 ${i + 1}` })}
-                        />
+                        <img key={i} src={url} alt={`答案图片 ${i + 1}`} className="review-image"
+                          onClick={() => setPreview({ src: url, title: `答案图片 ${i + 1}` })} />
                       ))}
                     </div>
                   ) : (
@@ -699,12 +511,9 @@ function ReviewFullscreen({
           ) : (
             <div className="review-result-row">
               {(['forgot', 'struggled', 'remembered', 'mastered'] as ReviewResult[]).map((r) => (
-                <button
-                  key={r}
-                  type="button"
+                <button key={r} type="button"
                   className={`review-result-btn review-result-${r}`}
-                  onClick={() => handleAnswered(r)}
-                >
+                  onClick={() => handleAnswered(r)}>
                   {reviewResultLabel[r]}
                 </button>
               ))}
@@ -713,7 +522,6 @@ function ReviewFullscreen({
         </div>
       </div>
 
-      {/* ===== 右侧 3 ===== */}
       <div className="review-right">
         <div className="review-right-body">
           <h3 className="review-right-title">题号</h3>
@@ -722,18 +530,11 @@ function ReviewFullscreen({
               const isActive = i === safeIndex;
               const isAnswered = !!answeredResults[mistakes[i].id];
               return (
-                <button
-                  key={i}
-                  type="button"
+                <button key={i} type="button"
                   className={`review-page-num ${isActive ? 'active' : ''} ${isAnswered ? 'answered' : ''}`}
-                  onClick={() => goTo(i)}
-                >
+                  onClick={() => goTo(i)}>
                   {isActive && (
-                    <motion.span
-                      layoutId="review-num-pill"
-                      className="review-num-pill"
-                      transition={numPillTransition}
-                    />
+                    <motion.span layoutId="review-num-pill" className="review-num-pill" transition={numPillTransition} />
                   )}
                   <span className="review-num-label">{i + 1}</span>
                 </button>
@@ -741,19 +542,11 @@ function ReviewFullscreen({
             })}
           </div>
           <div className="review-page-arrows">
-            <button
-              type="button"
-              className="review-page-arrow"
-              disabled={page === 0}
-              onClick={() => { const p = Math.max(0, page - 1); setPage(p); goTo(p * PAGE_SIZE); }}
-            >‹</button>
+            <button type="button" className="review-page-arrow" disabled={page === 0}
+              onClick={() => { const p = Math.max(0, page - 1); setPage(p); goTo(p * PAGE_SIZE); }}>‹</button>
             <span className="review-page-indicator">{page + 1} / {totalPages}</span>
-            <button
-              type="button"
-              className="review-page-arrow"
-              disabled={page >= totalPages - 1}
-              onClick={() => { const p = Math.min(totalPages - 1, page + 1); setPage(p); goTo(p * PAGE_SIZE); }}
-            >›</button>
+            <button type="button" className="review-page-arrow" disabled={page >= totalPages - 1}
+              onClick={() => { const p = Math.min(totalPages - 1, page + 1); setPage(p); goTo(p * PAGE_SIZE); }}>›</button>
           </div>
         </div>
 
@@ -777,41 +570,29 @@ function ReviewFullscreen({
   );
 }
 
-// ===== 第 2 段结束 =====
-      // ===== 模式选择弹窗 =====
+// ===== 模式选择弹窗 =====
 function ModeDialog({
   open, onCancel, onPickNormal, onPickExam, normalHasSave, examHasSave, normalDueCount
 }: {
-  open: boolean;
-  onCancel: () => void;
-  onPickNormal: () => void;
-  onPickExam: () => void;
-  normalHasSave: boolean;
-  examHasSave: boolean;
-  normalDueCount: number;
+  open: boolean; onCancel: () => void; onPickNormal: () => void; onPickExam: () => void;
+  normalHasSave: boolean; examHasSave: boolean; normalDueCount: number;
 }) {
   return (
     <CenterDialog open={open} onCancel={onCancel}>
       <div className="mode-dialog">
         <h2 className="mode-dialog-title">选择复习模式</h2>
         <button type="button" className="mode-card" onClick={onPickNormal}>
-          <div className="mode-card-icon mode-icon-normal">
-            <BookOpen size={22} />
-          </div>
+          <div className="mode-card-icon mode-icon-normal"><BookOpen size={22} /></div>
           <div className="mode-card-body">
             <div className="mode-card-name">正常复习</div>
             <div className="mode-card-desc">
-              {normalDueCount > 0
-                ? `按复习计划，复习今天到期的 ${normalDueCount} 道题`
-                : '今天没有到期的题'}
+              {normalDueCount > 0 ? `按复习计划，复习今天到期的 ${normalDueCount} 道题` : '今天没有到期的题'}
             </div>
             {normalHasSave && <span className="mode-card-badge">有未完成的进度</span>}
           </div>
         </button>
         <button type="button" className="mode-card" onClick={onPickExam}>
-          <div className="mode-card-icon mode-icon-exam">
-            <GraduationCap size={22} />
-          </div>
+          <div className="mode-card-icon mode-icon-exam"><GraduationCap size={22} /></div>
           <div className="mode-card-body">
             <div className="mode-card-name">备考模式</div>
             <div className="mode-card-desc">选一科，把该科所有错题过一遍</div>
@@ -828,9 +609,7 @@ function ModeDialog({
 function ExamSetupDialog({
   open, subjects, onCancel, onStart
 }: {
-  open: boolean;
-  subjects: TaxonomyOption[];
-  onCancel: () => void;
+  open: boolean; subjects: TaxonomyOption[]; onCancel: () => void;
   onStart: (subjectId: string, subjectName: string, orderBy: ExamOrderBy) => void;
 }) {
   const [subjectId, setSubjectId] = useState('');
@@ -866,14 +645,9 @@ function ExamSetupDialog({
           ) : (
             <div className="exam-setup-chips">
               {subjects.map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
+                <button key={s.id} type="button"
                   className={`exam-setup-chip ${subjectId === s.id ? 'active' : ''}`}
-                  onClick={() => setSubjectId(s.id)}
-                >
-                  {s.name}
-                </button>
+                  onClick={() => setSubjectId(s.id)}>{s.name}</button>
               ))}
             </div>
           )}
@@ -882,14 +656,9 @@ function ExamSetupDialog({
           <div className="exam-setup-label">题目顺序</div>
           <div className="exam-setup-chips">
             {orderOptions.map((o) => (
-              <button
-                key={o.id}
-                type="button"
+              <button key={o.id} type="button"
                 className={`exam-setup-chip ${orderBy === o.id ? 'active' : ''}`}
-                onClick={() => setOrderBy(o.id)}
-              >
-                {o.name}
-              </button>
+                onClick={() => setOrderBy(o.id)}>{o.name}</button>
             ))}
           </div>
         </div>
@@ -902,16 +671,10 @@ function ExamSetupDialog({
   );
 }
 
-// ===== 继续/重新开始 弹窗 =====
+// ===== 继续/重开弹窗 =====
 function ResumeDialog({
   open, kind, onCancel, onResume, onRestart
-}: {
-  open: boolean;
-  kind: ReviewSessionKind;
-  onCancel: () => void;
-  onResume: () => void;
-  onRestart: () => void;
-}) {
+}: { open: boolean; kind: ReviewSessionKind; onCancel: () => void; onResume: () => void; onRestart: () => void; }) {
   return (
     <CenterDialog open={open} onCancel={onCancel}>
       <div className="resume-dialog">
@@ -947,10 +710,7 @@ function App() {
   const [examSetupOpen, setExamSetupOpen] = useState(false);
   const [resumeKind, setResumeKind] = useState<ReviewSessionKind | null>(null);
   const [reviewSession, setReviewSession] = useState<{
-    kind: ReviewSessionKind;
-    subjectName?: string;
-    mistakeIds: string[];
-    progress: ReviewSessionProgress | null;
+    kind: ReviewSessionKind; subjectName?: string; mistakeIds: string[]; progress: ReviewSessionProgress | null;
   } | null>(null);
   const [normalHasSave, setNormalHasSave] = useState(false);
   const [examHasSave, setExamHasSave] = useState(false);
@@ -1010,10 +770,7 @@ function App() {
 
   useEffect(() => {
     const stripped = importItems.map((it) => ({
-      itemKey: it.itemKey,
-      draft: it.draft,
-      questionImages: [],
-      answerImages: []
+      itemKey: it.itemKey, draft: it.draft, questionImages: [], answerImages: []
     }));
     window.localStorage.setItem(IMPORT_ITEMS_KEY, JSON.stringify(stripped));
     window.localStorage.removeItem(IMPORT_LEGACY_DRAFT_KEY);
@@ -1053,7 +810,6 @@ function App() {
   }, [images]);
 
   const taxonomyMap = useMemo(() => new Map(taxonomies.map((item) => [item.id, item.name])), [taxonomies]);
-
   const taxonomiesByType = useMemo(() => {
     const grouped: Record<TaxonomyType, TaxonomyOption[]> = { subject: [], cause: [], source: [] };
     taxonomies.forEach((item) => grouped[item.type].push(item));
@@ -1068,7 +824,6 @@ function App() {
   const editingMistake = editingId ? mistakes.find((m) => m.id === editingId) ?? null : null;
   const editingImages = editingId ? (imagesByMistake.get(editingId) ?? []) : [];
 
-  // 只有普通复习才更新复习计划；备考模式只是临时过一遍
   const handleAnswered = async (kind: ReviewSessionKind, mistake: MistakeItem, result: ReviewResult) => {
     if (kind === 'normal') {
       await recordReview(mistake, result);
@@ -1079,6 +834,7 @@ function App() {
   const handleArchive = async (mistake: MistakeItem) => {
     await db.mistakes.update(mistake.id, { archived: !mistake.archived, updatedAt: new Date().toISOString() });
     await refresh();
+    setToast(mistake.archived ? '已恢复' : '已归档');
   };
 
   const handleDelete = async (mistake: MistakeItem) => {
@@ -1127,13 +883,8 @@ function App() {
   };
 
   const startExamReview = (subjectId: string, subjectName: string, orderBy: ExamOrderBy, progress: ReviewSessionProgress | null) => {
-    const ids = progress?.mistakeIds?.length
-      ? progress.mistakeIds
-      : buildExamList(subjectId, orderBy).map(m => m.id);
-    if (ids.length === 0) {
-      setToast('这个科目还没错题');
-      return;
-    }
+    const ids = progress?.mistakeIds?.length ? progress.mistakeIds : buildExamList(subjectId, orderBy).map(m => m.id);
+    if (ids.length === 0) { setToast('这个科目还没错题'); return; }
     setReviewSession({ kind: 'exam', subjectName, mistakeIds: ids, progress });
     setActiveTab('review');
   };
@@ -1141,24 +892,15 @@ function App() {
   const handlePickNormal = () => {
     setModeDialogOpen(false);
     const session = loadSession('normal');
-    if (session) {
-      setResumeKind('normal');
-      return;
-    }
-    if (dueMistakes.length === 0) {
-      setToast('今天没有到期的题，去备考模式吧');
-      return;
-    }
+    if (session) { setResumeKind('normal'); return; }
+    if (dueMistakes.length === 0) { setToast('今天没有到期的题，去备考模式吧'); return; }
     startNormalReview(null);
   };
 
   const handlePickExam = () => {
     setModeDialogOpen(false);
     const session = loadSession('exam');
-    if (session) {
-      setResumeKind('exam');
-      return;
-    }
+    if (session) { setResumeKind('exam'); return; }
     setExamSetupOpen(true);
   };
 
@@ -1168,11 +910,8 @@ function App() {
     if (!kind) return;
     const session = loadSession(kind);
     if (!session) return;
-    if (kind === 'normal') {
-      startNormalReview(session);
-    } else {
-      startExamReview(session.subjectId ?? '', session.subjectName ?? '', session.orderBy ?? 'created', session);
-    }
+    if (kind === 'normal') startNormalReview(session);
+    else startExamReview(session.subjectId ?? '', session.subjectName ?? '', session.orderBy ?? 'created', session);
   };
 
   const handleRestart = () => {
@@ -1184,9 +923,7 @@ function App() {
     else setExamSetupOpen(true);
   };
 
-  const handleSaveSession = (progress: ReviewSessionProgress) => {
-    saveSession(progress);
-  };
+  const handleSaveSession = (progress: ReviewSessionProgress) => { saveSession(progress); };
 
   const handleExitReview = async () => {
     setReviewSession(null);
@@ -1201,11 +938,7 @@ function App() {
   }, [reviewSession, liveMistakes]);
 
   if (!settings) {
-    return (
-      <div className="loading">
-        <p>{bootError || '正在打开错题本'}</p>
-      </div>
-    );
+    return <div className="loading"><p>{bootError || '正在打开错题本'}</p></div>;
   }
 
   if (activeTab === 'review') {
@@ -1218,9 +951,7 @@ function App() {
               <h1>错题本</h1>
             </div>
           </header>
-          <div className="loading" style={{ minHeight: '60vh' }}>
-            <p>没有可复习的题目</p>
-          </div>
+          <div className="loading" style={{ minHeight: '60vh' }}><p>没有可复习的题目</p></div>
           <div style={{ textAlign: 'center' }}>
             <button type="button" className="review-empty-btn" onClick={handleExitReview}>返回</button>
           </div>
@@ -1286,13 +1017,11 @@ function App() {
 
       <main className="content">
         <AnimatePresence mode="wait">
-          <motion.div
-            key={activeTab}
+          <motion.div key={activeTab}
             initial={reducedMotion ? { opacity: 1 } : { opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={reducedMotion ? { duration: 0 } : fadeSlide}
-          >
+            transition={reducedMotion ? { duration: 0 } : fadeSlide}>
             {activeTab === 'today' && (
               <TodayView
                 dueMistakes={dueMistakes}
@@ -1309,15 +1038,12 @@ function App() {
                 currentIndex={importIndex}
                 onItemsChange={setImportItems}
                 onIndexChange={setImportIndex}
-                onSaved={async () => {
-                  await refresh();
-                  setToast('已存入错题本');
-                }}
+                onSaved={async () => { await refresh(); setToast('已存入错题本'); }}
               />
             )}
             {activeTab === 'gallery' && (
               <GalleryView
-                mistakes={liveMistakes}
+                mistakes={mistakes}
                 imagesByMistake={imagesByMistake}
                 taxonomyMap={taxonomyMap}
                 taxonomiesByType={taxonomiesByType}
@@ -1340,10 +1066,7 @@ function App() {
                 settings={settings}
                 taxonomiesByType={taxonomiesByType}
                 onRefresh={refresh}
-                onExport={async () => {
-                  const message = await exportBackup();
-                  setToast(message);
-                }}
+                onExport={async () => { const message = await exportBackup(); setToast(message); }}
                 onImport={handleImportBackup}
                 onToast={setToast}
               />
@@ -1362,66 +1085,50 @@ function App() {
 
       <AnimatePresence>
         {toast && (
-          <motion.div
-            className="toast"
+          <motion.div className="toast"
             initial={{ opacity: 0, y: 18, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.98 }}
-            transition={reducedMotion ? { duration: 0 } : springSnappy}
-          >
+            transition={reducedMotion ? { duration: 0 } : springSnappy}>
             {toast}
           </motion.div>
         )}
       </AnimatePresence>
 
-      <ModeDialog
-        open={modeDialogOpen}
+      <ModeDialog open={modeDialogOpen}
         onCancel={() => setModeDialogOpen(false)}
         onPickNormal={handlePickNormal}
         onPickExam={handlePickExam}
         normalHasSave={normalHasSave}
         examHasSave={examHasSave}
-        normalDueCount={dueMistakes.length}
-      />
-      <ExamSetupDialog
-        open={examSetupOpen}
+        normalDueCount={dueMistakes.length} />
+      <ExamSetupDialog open={examSetupOpen}
         subjects={taxonomiesByType.subject}
         onCancel={() => setExamSetupOpen(false)}
         onStart={(subjectId, subjectName, orderBy) => {
           setExamSetupOpen(false);
           startExamReview(subjectId, subjectName, orderBy, null);
-        }}
-      />
-      <ResumeDialog
-        open={!!resumeKind}
+        }} />
+      <ResumeDialog open={!!resumeKind}
         kind={resumeKind ?? 'normal'}
         onCancel={() => setResumeKind(null)}
         onResume={handleResume}
-        onRestart={handleRestart}
-      />
+        onRestart={handleRestart} />
     </div>
   );
 }
 
-// ===== 第 3 段结束 =====
-      // ===== TabButton =====
+// ===== TabButton =====
 function TabButton({ active, icon, label, onClick }: { active: boolean; icon: JSX.Element; label: string; onClick: () => void }) {
   const reducedMotion = useReducedMotion();
   return (
-    <motion.button
-      className={`tab-button ${active ? 'active' : ''}`}
-      onClick={onClick}
-      type="button"
-      aria-label={label}
+    <motion.button className={`tab-button ${active ? 'active' : ''}`}
+      onClick={onClick} type="button" aria-label={label}
       whileTap={reducedMotion ? undefined : { scale: 0.98 }}
-      style={{ willChange: 'transform' }}
-    >
+      style={{ willChange: 'transform' }}>
       {active && (
-        <motion.span
-          className="tab-highlight"
-          layoutId="tab-highlight"
-          transition={reducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 300, damping: 25 }}
-        />
+        <motion.span className="tab-highlight" layoutId="tab-highlight"
+          transition={reducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 300, damping: 25 }} />
       )}
       <span className="tab-icon">{icon}</span>
       <span className="tab-label">{label}</span>
@@ -1432,12 +1139,7 @@ function TabButton({ active, icon, label, onClick }: { active: boolean; icon: JS
 // ===== TodayView =====
 function TodayView({
   dueMistakes, onOpenMode, normalHasSave, examHasSave
-}: {
-  dueMistakes: MistakeItem[];
-  onOpenMode: () => void;
-  normalHasSave: boolean;
-  examHasSave: boolean;
-}) {
+}: { dueMistakes: MistakeItem[]; onOpenMode: () => void; normalHasSave: boolean; examHasSave: boolean; }) {
   const hasDue = dueMistakes.length > 0;
   const hasSave = normalHasSave || examHasSave;
   return (
@@ -1456,10 +1158,7 @@ function TodayView({
           </>
         )}
         {hasSave && (
-          <div className="today-save-badge">
-            <RotateCcw size={14} />
-            <span>有未完成的进度</span>
-          </div>
+          <div className="today-save-badge"><RotateCcw size={14} /><span>有未完成的进度</span></div>
         )}
       </div>
     </section>
@@ -1535,8 +1234,7 @@ function ImportView({
     if (!pending.length) return;
     updateItem(index, (it) => role === 'question'
       ? { ...it, questionImages: [...it.questionImages, ...pending] }
-      : { ...it, answerImages: [...it.answerImages, ...pending] }
-    );
+      : { ...it, answerImages: [...it.answerImages, ...pending] });
   };
 
   const handlePickNative = async (index: number, role: ImageRole) => {
@@ -1566,9 +1264,7 @@ function ImportView({
       const target = list.find((img) => img.id === id);
       if (target) URL.revokeObjectURL(target.url);
       const next = list.filter((img) => img.id !== id);
-      return role === 'question'
-        ? { ...it, questionImages: next }
-        : { ...it, answerImages: next };
+      return role === 'question' ? { ...it, questionImages: next } : { ...it, answerImages: next };
     });
   };
 
@@ -1587,10 +1283,8 @@ function ImportView({
 
   const addNewItem = () => {
     onItemsChange((current) => [...current, createEmptyItem({
-      subjectId: defaultSubjectId,
-      causeId: defaultCauseId,
-      sourceId: defaultSourceId,
-      sourceName: defaultSourceName
+      subjectId: defaultSubjectId, causeId: defaultCauseId,
+      sourceId: defaultSourceId, sourceName: defaultSourceName
     })]);
     const nextIndex = items.length;
     onIndexChange(nextIndex);
@@ -1604,10 +1298,8 @@ function ImportView({
   const removeItem = (index: number) => {
     onItemsChange((current) => {
       if (current.length <= 1) return [createEmptyItem({
-        subjectId: defaultSubjectId,
-        causeId: defaultCauseId,
-        sourceId: defaultSourceId,
-        sourceName: defaultSourceName
+        subjectId: defaultSubjectId, causeId: defaultCauseId,
+        sourceId: defaultSourceId, sourceName: defaultSourceName
       })];
       const next = [...current];
       const removed = next.splice(index, 1)[0];
@@ -1675,10 +1367,8 @@ function ImportView({
         releasePendingImages(it.answerImages);
       });
       onItemsChange([createEmptyItem({
-        subjectId: defaultSubjectId,
-        causeId: defaultCauseId,
-        sourceId: defaultSourceId,
-        sourceName: defaultSourceName
+        subjectId: defaultSubjectId, causeId: defaultCauseId,
+        sourceId: defaultSourceId, sourceName: defaultSourceName
       })]);
       onIndexChange(0);
       window.localStorage.removeItem(IMPORT_ITEMS_KEY);
@@ -1698,10 +1388,8 @@ function ImportView({
 
   return (
     <div className="import-carousel-wrap">
-      <input ref={questionInputRef} hidden type="file" accept="image/*" multiple
-        onChange={(e) => handleFileInputChange(e, 'question')} />
-      <input ref={answerInputRef} hidden type="file" accept="image/*" multiple
-        onChange={(e) => handleFileInputChange(e, 'answer')} />
+      <input ref={questionInputRef} hidden type="file" accept="image/*" multiple onChange={(e) => handleFileInputChange(e, 'question')} />
+      <input ref={answerInputRef} hidden type="file" accept="image/*" multiple onChange={(e) => handleFileInputChange(e, 'answer')} />
 
       <div className="import-carousel-head">
         <div className="import-carousel-tabs" ref={tabsRef}>
@@ -1709,18 +1397,11 @@ function ImportView({
             const active = i === currentIndex;
             const imgCount = it.questionImages.length + it.answerImages.length;
             return (
-              <button
-                key={it.itemKey}
-                type="button"
+              <button key={it.itemKey} type="button"
                 className={`import-carousel-tab ${active ? 'active' : ''}`}
-                onClick={() => jumpTo(i)}
-              >
+                onClick={() => jumpTo(i)}>
                 {active && (
-                  <motion.span
-                    layoutId="import-tab-pill"
-                    className="import-tab-pill"
-                    transition={pillTransition}
-                  />
+                  <motion.span layoutId="import-tab-pill" className="import-tab-pill" transition={pillTransition} />
                 )}
                 <span className="import-tab-label">
                   第 {i + 1} 题
@@ -1742,39 +1423,31 @@ function ImportView({
               <div className="import-left-col">
                 <SectionHeading title={`第 ${index + 1} 题`} meta={`${item.questionImages.length + item.answerImages.length} 张图片`} />
                 <div className="form-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <SegmentedControl
-                    label="科目"
+                  <SegmentedControl label="科目"
                     options={taxonomiesByType.subject.map(opt => ({ id: opt.id, name: opt.name }))}
                     value={item.draft.subjectId}
-                    onChange={(val) => updateDraft(index, { subjectId: val })}
-                  />
-                  <SegmentedControl
-                    label="错因"
+                    onChange={(val) => updateDraft(index, { subjectId: val })} />
+                  <SegmentedControl label="错因"
                     options={taxonomiesByType.cause.map(opt => ({ id: opt.id, name: opt.name }))}
                     value={item.draft.causeId}
-                    onChange={(val) => updateDraft(index, { causeId: val })}
-                  />
+                    onChange={(val) => updateDraft(index, { causeId: val })} />
                   <div className="field full">
-                    <SegmentedControl
-                      label="题源"
+                    <SegmentedControl label="题源"
                       options={sourceOptions}
                       value={item.draft.sourceId || (sourceOptions.find(o => o.name === item.draft.sourceName)?.id ?? '')}
                       onChange={(val) => {
                         const target = sourceOptions.find(o => o.id === val);
                         updateDraft(index, { sourceId: val, sourceName: target?.name ?? '' });
-                      }}
-                    />
+                      }} />
                   </div>
-                  <SegmentedControl
-                    label="难度"
+                  <SegmentedControl label="难度"
                     options={[
                       { id: 'hard', name: difficultyLabel.hard },
                       { id: 'medium', name: difficultyLabel.medium },
                       { id: 'easy', name: difficultyLabel.easy }
                     ]}
                     value={item.draft.difficulty}
-                    onChange={(val) => updateDraft(index, { difficulty: val as Difficulty })}
-                  />
+                    onChange={(val) => updateDraft(index, { difficulty: val as Difficulty })} />
                   <TextArea label="备注" value={item.draft.note} onChange={(note) => updateDraft(index, { note })} />
                   <TextArea label="启发" value={item.draft.inspiration} onChange={(inspiration) => updateDraft(index, { inspiration })} />
                 </div>
@@ -1805,20 +1478,16 @@ function ImportView({
                   onChange={(answer) => updateDraft(index, { answer })}
                   onGallery={() => handlePickNative(index, 'answer')}
                   onCamera={() => handleCamera(index, 'answer')}
-                  onRemove={(id) => removePending(index, id, 'answer')}
-                />
+                  onRemove={(id) => removePending(index, id, 'answer')} />
 
                 {items.length > 1 && (
-                  <MotionTapButton
-                    type="button"
-                    onClick={() => removeItem(index)}
+                  <MotionTapButton type="button" onClick={() => removeItem(index)}
                     style={{
                       display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                       minHeight: 40, borderRadius: 'var(--radius-control)',
                       background: 'rgba(196,90,106,0.12)', border: '1px solid rgba(196,90,106,0.3)',
                       color: '#c45a6a', fontSize: 13, fontWeight: 600, cursor: 'pointer'
-                    }}
-                  >
+                    }}>
                     <X size={16} /> 删除这一题
                   </MotionTapButton>
                 )}
@@ -1830,14 +1499,10 @@ function ImportView({
 
       <div className="import-carousel-footer">
         <div className="import-carousel-footer-left">
-          <span>共 {items.length} 道</span>
-          <span>·</span>
-          <span>当前第 {currentIndex + 1} 道</span>
+          <span>共 {items.length} 道</span><span>·</span><span>当前第 {currentIndex + 1} 道</span>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button type="button" className="import-add-btn" onClick={addNewItem}>
-            <Plus size={15} /> 加一题
-          </button>
+          <button type="button" className="import-add-btn" onClick={addNewItem}><Plus size={15} /> 加一题</button>
           <button type="button" className="import-save-all-btn" disabled={saving} onClick={handleSaveAll}>
             {saving ? '保存中…' : '一键全部保存'}
           </button>
@@ -1850,7 +1515,7 @@ function ImportView({
   );
 }
 
-// ===== GalleryView =====
+// ===== GalleryView（带归档/恢复切换） =====
 function GalleryView({
   mistakes, imagesByMistake, taxonomyMap, taxonomiesByType, onArchive, onEdit, onDelete
 }: {
@@ -1866,42 +1531,48 @@ function GalleryView({
   const [subjectId, setSubjectId] = useState('');
   const [causeId, setCauseId] = useState('');
   const [difficulty, setDifficulty] = useState('');
+  const [showArchived, setShowArchived] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<MistakeItem | null>(null);
   const [deleteAnchor, setDeleteAnchor] = useState<DOMRect | null>(null);
 
   const difficultyOptions = (['hard', 'medium', 'easy'] as Difficulty[]).map((item) => ({
-    id: item,
-    name: difficultyLabel[item]
+    id: item, name: difficultyLabel[item]
   }));
 
-  const filtered = mistakes.filter((mistake) => {
-    const text = `${mistake.title} ${mistake.note} ${mistake.answer} ${mistake.inspiration} ${mistake.sourceName}`.toLowerCase();
-    return (
-      (!query.trim() || text.includes(query.trim().toLowerCase())) &&
-      (!subjectId || mistake.subjectId === subjectId) &&
-      (!causeId || mistake.causeId === causeId) &&
-      (!difficulty || mistake.difficulty === difficulty)
-    );
-  });
+  const archivedCount = mistakes.filter((m) => m.archived).length;
+
+  const filtered = mistakes
+    .filter((m) => showArchived ? m.archived : !m.archived)
+    .filter((mistake) => {
+      const text = `${mistake.title} ${mistake.note} ${mistake.answer} ${mistake.inspiration} ${mistake.sourceName}`.toLowerCase();
+      return (
+        (!query.trim() || text.includes(query.trim().toLowerCase())) &&
+        (!subjectId || mistake.subjectId === subjectId) &&
+        (!causeId || mistake.causeId === causeId) &&
+        (!difficulty || mistake.difficulty === difficulty)
+      );
+    });
 
   const pendingTitle = pendingDelete ? (pendingDelete.title.trim() || '这道错题') : '这道错题';
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
-      className="gallery-shell"
-    >
-      <SectionHeading title="错题画廊" meta={`${filtered.length} 道`} />
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="gallery-shell">
+      <div className="gallery-head">
+        <SectionHeading title={showArchived ? '已归档' : '错题画廊'} meta={`${filtered.length} 道`} />
+        <div className="gallery-mode-switch">
+          <button type="button" className={`gallery-mode-btn ${!showArchived ? 'active' : ''}`} onClick={() => setShowArchived(false)}>
+            未归档
+          </button>
+          <button type="button" className={`gallery-mode-btn ${showArchived ? 'active' : ''}`} onClick={() => setShowArchived(true)}>
+            已归档{archivedCount > 0 ? ` · ${archivedCount}` : ''}
+          </button>
+        </div>
+      </div>
 
       <div className="search-box">
         <Search size={18} />
-        <input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="搜索标题、备注、题源、答案、启发"
-        />
+        <input value={query} onChange={(event) => setQuery(event.target.value)}
+          placeholder="搜索标题、备注、题源、答案、启发" />
       </div>
 
       <div className="filter-groups">
@@ -1913,18 +1584,21 @@ function GalleryView({
       <div className="gallery-scroll-area">
         <div className="gallery-grid-responsive">
           {filtered.map((mistake) => (
-            <MistakeCard
-              key={mistake.id}
+            <MistakeCard key={mistake.id}
               mistake={mistake}
               images={imagesByMistake.get(mistake.id) ?? []}
               taxonomyMap={taxonomyMap}
-              onArchive={onArchive}
               onEdit={onEdit}
               onRequestDelete={(rect) => { setDeleteAnchor(rect); setPendingDelete(mistake); }}
-            />
+              onArchive={onArchive}
+              archiveLabel={showArchived ? '恢复' : '归档'} />
           ))}
         </div>
-        {filtered.length === 0 && <EmptyState icon={<MoreHorizontal />} title="没找到" text="换个筛选试试。" />}
+        {filtered.length === 0 && (
+          <EmptyState icon={<MoreHorizontal />}
+            title={showArchived ? '还没有归档的题' : '没找到'}
+            text={showArchived ? '归档的题会出现在这里，可以随时恢复。' : '换个筛选试试。'} />
+        )}
       </div>
 
       <AnchorDialog open={!!pendingDelete} anchorRect={deleteAnchor} onCancel={() => { setPendingDelete(null); setDeleteAnchor(null); }}>
@@ -1932,11 +1606,12 @@ function GalleryView({
         <div className="anchor-dialog-desc">“{pendingTitle}” 及它的图片、复习记录会被一起删掉，无法恢复。</div>
         <div className="anchor-dialog-actions">
           <button type="button" className="ad-btn ad-cancel" onClick={() => { setPendingDelete(null); setDeleteAnchor(null); }}>取消</button>
-          <button type="button" className="ad-btn ad-danger" onClick={async () => {
-            if (pendingDelete) await onDelete(pendingDelete);
-            setPendingDelete(null);
-            setDeleteAnchor(null);
-          }}>确认删除</button>
+          <button type="button" className="ad-btn ad-danger"
+            onClick={async () => {
+              if (pendingDelete) await onDelete(pendingDelete);
+              setPendingDelete(null);
+              setDeleteAnchor(null);
+            }}>确认删除</button>
         </div>
       </AnchorDialog>
     </motion.div>
@@ -1947,29 +1622,19 @@ function GalleryView({
 function InlineFilterGroup({
   groupKey, allLabel, options, value, onChange
 }: {
-  groupKey: string;
-  allLabel: string;
-  options: { id: string; name: string }[];
-  value: string;
-  onChange: (value: string) => void;
+  groupKey: string; allLabel: string; options: { id: string; name: string }[];
+  value: string; onChange: (value: string) => void;
 }) {
   const pillTransition = { type: 'spring' as const, stiffness: 520, damping: 24, mass: 0.7, restDelta: 0.001 };
 
   const renderChip = (id: string, label: string) => {
     const selected = value === id;
     return (
-      <button
-        key={id || '__all__'}
-        type="button"
+      <button key={id || '__all__'} type="button"
         className={`inline-filter-chip ${selected ? 'selected' : ''}`}
-        onClick={() => onChange(id)}
-      >
+        onClick={() => onChange(id)}>
         {selected && (
-          <motion.span
-            layoutId={`filter-pill-${groupKey}`}
-            className="inline-filter-pill"
-            transition={pillTransition}
-          />
+          <motion.span layoutId={`filter-pill-${groupKey}`} className="inline-filter-pill" transition={pillTransition} />
         )}
         <span className="inline-filter-label">{label}</span>
       </button>
@@ -1984,8 +1649,7 @@ function InlineFilterGroup({
   );
 }
 
-// ===== 第 4 段结束 =====
-    // ===== EditView（二次编辑） =====
+// ===== EditView =====
 function EditView({
   mistake, images, taxonomiesByType, settings, onSaved, onCancel
 }: {
@@ -2001,15 +1665,10 @@ function EditView({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [draft, setDraft] = useState<MistakeDraft>({
-    title: mistake.title,
-    note: mistake.note,
-    answer: mistake.answer,
-    inspiration: mistake.inspiration,
-    subjectId: mistake.subjectId,
-    causeId: mistake.causeId,
-    sourceId: mistake.sourceId,
-    sourceName: mistake.sourceName,
-    difficulty: mistake.difficulty
+    title: mistake.title, note: mistake.note, answer: mistake.answer,
+    inspiration: mistake.inspiration, subjectId: mistake.subjectId,
+    causeId: mistake.causeId, sourceId: mistake.sourceId,
+    sourceName: mistake.sourceName, difficulty: mistake.difficulty
   });
   const [questionImages, setQuestionImages] = useState<PendingImage[]>([]);
   const [answerImages, setAnswerImages] = useState<PendingImage[]>([]);
@@ -2022,19 +1681,13 @@ function EditView({
     loadedRef.current = true;
     const q = images.filter(img => (img.role ?? 'question') === 'question').map(imageAssetToPending);
     const a = images.filter(img => img.role === 'answer').map(imageAssetToPending);
-    qRef.current = q;
-    aRef.current = a;
-    setQuestionImages(q);
-    setAnswerImages(a);
+    qRef.current = q; aRef.current = a;
+    setQuestionImages(q); setAnswerImages(a);
   }, [images]);
 
   useEffect(() => { qRef.current = questionImages; }, [questionImages]);
   useEffect(() => { aRef.current = answerImages; }, [answerImages]);
-
-  useEffect(() => () => {
-    releasePendingImages(qRef.current);
-    releasePendingImages(aRef.current);
-  }, []);
+  useEffect(() => () => { releasePendingImages(qRef.current); releasePendingImages(aRef.current); }, []);
 
   const addFiles = (files: File[], role: ImageRole) => {
     const pending = files
@@ -2060,9 +1713,7 @@ function EditView({
     try {
       const photo = await takePhotoFromCamera();
       addFiles([photo], role);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '拍照失败');
-    }
+    } catch (err) { setError(err instanceof Error ? err.message : '拍照失败'); }
   };
 
   const removePending = (id: string, role: ImageRole) => {
@@ -2106,77 +1757,58 @@ function EditView({
       await onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : '保存失败');
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   };
 
   const sourceOptions = taxonomiesByType.source.map(opt => ({ id: opt.id, name: opt.name }));
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
-      className="edit-shell-wrapper"
-    >
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="edit-shell-wrapper">
       <div className="edit-shell">
         <div className="edit-head">
           <div>
             <p className="eyebrow">编辑错题</p>
             <h1>{draft.title || '未命名'}</h1>
           </div>
-          <button type="button" className="icon-button" onClick={onCancel} aria-label="取消编辑">
-            <X size={18} />
-          </button>
+          <button type="button" className="icon-button" onClick={onCancel} aria-label="取消编辑"><X size={18} /></button>
         </div>
 
         <div className="import-page-inner">
           <div className="import-left-col">
             <div className="form-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <SegmentedControl
-                label="科目"
+              <SegmentedControl label="科目"
                 options={taxonomiesByType.subject.map(opt => ({ id: opt.id, name: opt.name }))}
                 value={draft.subjectId}
-                onChange={(val) => setDraft({ ...draft, subjectId: val })}
-              />
-              <SegmentedControl
-                label="错因"
+                onChange={(val) => setDraft({ ...draft, subjectId: val })} />
+              <SegmentedControl label="错因"
                 options={taxonomiesByType.cause.map(opt => ({ id: opt.id, name: opt.name }))}
                 value={draft.causeId}
-                onChange={(val) => setDraft({ ...draft, causeId: val })}
-              />
+                onChange={(val) => setDraft({ ...draft, causeId: val })} />
               <div className="field full">
-                <SegmentedControl
-                  label="题源"
+                <SegmentedControl label="题源"
                   options={sourceOptions}
                   value={draft.sourceId || (sourceOptions.find(o => o.name === draft.sourceName)?.id ?? '')}
                   onChange={(val) => {
                     const target = sourceOptions.find(o => o.id === val);
                     setDraft({ ...draft, sourceId: val, sourceName: target?.name ?? '' });
-                  }}
-                />
+                  }} />
               </div>
-              <SegmentedControl
-                label="难度"
+              <SegmentedControl label="难度"
                 options={[
                   { id: 'hard', name: difficultyLabel.hard },
                   { id: 'medium', name: difficultyLabel.medium },
                   { id: 'easy', name: difficultyLabel.easy }
                 ]}
                 value={draft.difficulty}
-                onChange={(val) => setDraft({ ...draft, difficulty: val as Difficulty })}
-              />
+                onChange={(val) => setDraft({ ...draft, difficulty: val as Difficulty })} />
               <TextArea label="备注" value={draft.note} onChange={(note) => setDraft({ ...draft, note })} />
               <TextArea label="启发" value={draft.inspiration} onChange={(inspiration) => setDraft({ ...draft, inspiration })} />
             </div>
           </div>
 
           <div className="import-side-panel">
-            <input ref={questionInputRef} hidden type="file" accept="image/*" multiple
-              onChange={(e) => addFiles(Array.from(e.target.files ?? []), 'question')} />
-            <input ref={answerInputRef} hidden type="file" accept="image/*" multiple
-              onChange={(e) => addFiles(Array.from(e.target.files ?? []), 'answer')} />
+            <input ref={questionInputRef} hidden type="file" accept="image/*" multiple onChange={(e) => addFiles(Array.from(e.target.files ?? []), 'question')} />
+            <input ref={answerInputRef} hidden type="file" accept="image/*" multiple onChange={(e) => addFiles(Array.from(e.target.files ?? []), 'answer')} />
 
             <TextInput label="标题" value={draft.title} placeholder="可不填"
               onChange={(title) => setDraft({ ...draft, title })} />
@@ -2202,8 +1834,7 @@ function EditView({
               onChange={(answer) => setDraft({ ...draft, answer })}
               onGallery={() => handlePickNative('answer')}
               onCamera={() => handleCamera('answer')}
-              onRemove={(id) => removePending(id, 'answer')}
-            />
+              onRemove={(id) => removePending(id, 'answer')} />
 
             {error && <p className="form-error">{error}</p>}
 
@@ -2224,24 +1855,16 @@ function EditView({
 function AnswerField({
   value, images, onChange, onGallery, onCamera, onRemove
 }: {
-  value: string;
-  images: PendingImage[];
-  onChange: (value: string) => void;
-  onGallery: () => void;
-  onCamera: () => void;
-  onRemove: (id: string) => void;
+  value: string; images: PendingImage[]; onChange: (value: string) => void;
+  onGallery: () => void; onCamera: () => void; onRemove: (id: string) => void;
 }) {
   return (
     <div className="field full answer-field">
       <span>答案</span>
       <textarea value={value} rows={4} onChange={(event) => onChange(event.target.value)} />
       <div className="answer-image-tools">
-        <MotionTapButton type="button" onClick={onGallery}>
-          <Images size={18} /> 相册
-        </MotionTapButton>
-        <MotionTapButton type="button" onClick={onCamera}>
-          <Camera size={18} /> 拍照
-        </MotionTapButton>
+        <MotionTapButton type="button" onClick={onGallery}><Images size={18} /> 相册</MotionTapButton>
+        <MotionTapButton type="button" onClick={onCamera}><Camera size={18} /> 拍照</MotionTapButton>
       </div>
       <PreviewGrid images={images} onRemove={onRemove} />
     </div>
@@ -2251,25 +1874,14 @@ function AnswerField({
 // ===== PreviewGrid =====
 function PreviewGrid({ images, onRemove }: { images: PendingImage[]; onRemove: (id: string) => void }) {
   const [viewer, setViewer] = useState<{ src: string; title: string } | null>(null);
-
   return (
     <>
       <div className="preview-grid">
         <AnimatePresence initial={false}>
           {images.map((image, index) => (
-            <motion.div
-              className="preview-tile"
-              key={image.id}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={springSoft}
-            >
-              <button
-                className="preview-open"
-                type="button"
-                onClick={() => setViewer({ src: image.url, title: `图片 ${index + 1}` })}
-              >
+            <motion.div className="preview-tile" key={image.id}
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={springSoft}>
+              <button className="preview-open" type="button" onClick={() => setViewer({ src: image.url, title: `图片 ${index + 1}` })}>
                 <img src={image.url} alt="预览" />
               </button>
               <button className="preview-remove" type="button" onClick={() => onRemove(image.id)} aria-label="删除图片">
@@ -2288,11 +1900,8 @@ function PreviewGrid({ images, onRemove }: { images: PendingImage[]; onRemove: (
 function CalendarView({
   mistakes, imagesByMistake, taxonomyMap, selectedDate, onSelectDate
 }: {
-  mistakes: MistakeItem[];
-  imagesByMistake: Map<string, ImageAsset[]>;
-  taxonomyMap: Map<string, string>;
-  selectedDate: string;
-  onSelectDate: (date: string) => void;
+  mistakes: MistakeItem[]; imagesByMistake: Map<string, ImageAsset[]>;
+  taxonomyMap: Map<string, string>; selectedDate: string; onSelectDate: (date: string) => void;
 }) {
   const weekLabels = ['一', '二', '三', '四', '五', '六', '日'];
   const todayKey = toDateKey(new Date());
@@ -2373,7 +1982,8 @@ function CalendarView({
       </div>
       <div className="stack">
         {selectedMistakes.map((mistake) => (
-          <MistakeCard key={mistake.id} mistake={mistake} images={imagesByMistake.get(mistake.id) ?? []} taxonomyMap={taxonomyMap} />
+          <MistakeCard key={mistake.id} mistake={mistake}
+            images={imagesByMistake.get(mistake.id) ?? []} taxonomyMap={taxonomyMap} />
         ))}
         {selectedMistakes.length === 0 && <EmptyState icon={<CalendarDays />} title="这天没有安排" text="日历会随着复习自动变化。" />}
       </div>
@@ -2419,7 +2029,9 @@ function SettingsView({
           <div className="settings-subblock" key={type}>
             <h3>{taxonomyTitles[type]}</h3>
             <div className="add-row">
-              <input value={newNames[type]} onChange={(event) => setNewNames({ ...newNames, [type]: event.target.value })} placeholder={`新增${taxonomyTitles[type]}`} />
+              <input value={newNames[type]}
+                onChange={(event) => setNewNames({ ...newNames, [type]: event.target.value })}
+                placeholder={`新增${taxonomyTitles[type]}`} />
               <button type="button" onClick={() => handleAdd(type)} aria-label={`新增${taxonomyTitles[type]}`}>
                 <Plus size={18} />
               </button>
@@ -2465,13 +2077,7 @@ function SettingsView({
 // ===== SettingsAccordion =====
 function SettingsAccordion({
   icon, title, open, onToggle, children
-}: {
-  icon: JSX.Element;
-  title: string;
-  open: boolean;
-  onToggle: () => void;
-  children: ReactNode;
-}) {
+}: { icon: JSX.Element; title: string; open: boolean; onToggle: () => void; children: ReactNode; }) {
   return (
     <article className="settings-row">
       <button type="button" className="settings-row-head" onClick={onToggle}>
@@ -2483,13 +2089,11 @@ function SettingsAccordion({
       </button>
       <AnimatePresence initial={false}>
         {open && (
-          <motion.div
-            className="settings-row-body"
+          <motion.div className="settings-row-body"
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.14, ease: 'easeOut' }}
-          >
+            transition={{ duration: 0.14, ease: 'easeOut' }}>
             <div>{children}</div>
           </motion.div>
         )}
@@ -2526,7 +2130,6 @@ function ReviewPreview({ intervals }: { intervals: number[] }) {
 // ===== TaxonomyEditor =====
 function TaxonomyEditor({ item, onRefresh }: { item: TaxonomyOption; onRefresh: () => Promise<void> }) {
   const [name, setName] = useState(item.name);
-
   return (
     <div className="taxonomy-item">
       <input value={name} onChange={(event) => setName(event.target.value)} onBlur={async () => {
@@ -2543,9 +2146,9 @@ function TaxonomyEditor({ item, onRefresh }: { item: TaxonomyOption; onRefresh: 
   );
 }
 
-// ===== MistakeCard =====
+// ===== MistakeCard（带归档/恢复按钮） =====
 function MistakeCard({
-  mistake, images, taxonomyMap, compact = false, footer, onArchive, onEdit, onRequestDelete
+  mistake, images, taxonomyMap, compact = false, footer, onArchive, onEdit, onRequestDelete, archiveLabel
 }: {
   mistake: MistakeItem;
   images: ImageAsset[];
@@ -2555,6 +2158,7 @@ function MistakeCard({
   onArchive?: (mistake: MistakeItem) => Promise<void>;
   onEdit?: (mistake: MistakeItem) => void;
   onRequestDelete?: (rect: DOMRect) => void;
+  archiveLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const deleteBtnRef = useRef<HTMLButtonElement>(null);
@@ -2564,6 +2168,7 @@ function MistakeCard({
   const title = mistake.title.trim() || `${subjectName}错题`;
   const questionImages = images.filter((image) => (image.role ?? 'question') === 'question');
   const answerImages = images.filter((image) => image.role === 'answer');
+  const isRestore = archiveLabel === '恢复';
 
   return (
     <article className={`mistake-card ${compact ? 'compact' : ''}`}>
@@ -2584,22 +2189,21 @@ function MistakeCard({
             </button>
           )}
           {onRequestDelete && (
-            <button
-              ref={deleteBtnRef}
-              type="button"
-              className="icon-button icon-delete"
+            <button ref={deleteBtnRef} type="button" className="icon-button icon-delete"
               onClick={() => {
                 const rect = deleteBtnRef.current?.getBoundingClientRect() ?? null;
                 if (rect) onRequestDelete(rect);
-              }}
-              aria-label="删除"
-            >
+              }} aria-label="删除">
               <Trash2 size={17} />
             </button>
           )}
-          {onArchive && (
-            <button type="button" className="icon-button" onClick={() => onArchive(mistake)} aria-label="归档">
-              <Archive size={18} />
+          {onArchive && archiveLabel && (
+            <button type="button"
+              className={`icon-button ${isRestore ? 'icon-restore' : 'icon-archive'}`}
+              onClick={() => onArchive(mistake)}
+              aria-label={archiveLabel}
+              title={archiveLabel}>
+              {isRestore ? <RotateCcw size={17} /> : <Archive size={17} />}
             </button>
           )}
         </div>
@@ -2607,7 +2211,8 @@ function MistakeCard({
       <ImageStrip images={questionImages} />
       {mistake.note && <p className="note">{mistake.note}</p>}
       {(mistake.answer || mistake.inspiration || answerImages.length > 0) && (
-        <details className="answer-box" open={open} onToggle={(event) => setOpen((event.currentTarget as HTMLDetailsElement).open)}>
+        <details className="answer-box" open={open}
+          onToggle={(event) => setOpen((event.currentTarget as HTMLDetailsElement).open)}>
           <summary>
             答案和启发
             <motion.span animate={{ rotate: open ? 180 : 0 }} transition={springSnappy}>
@@ -2658,11 +2263,8 @@ function ImageStrip({ images }: { images: ImageAsset[] }) {
     <>
       <div className="image-strip">
         {urls.map((url, index) => (
-          <button
-            key={url.thumb}
-            type="button"
-            onClick={() => setViewer({ src: url.full, title: `错题图片 ${index + 1}` })}
-          >
+          <button key={url.thumb} type="button"
+            onClick={() => setViewer({ src: url.full, title: `错题图片 ${index + 1}` })}>
             <img src={url.thumb} alt={`错题图片 ${index + 1}`} />
           </button>
         ))}
@@ -2694,7 +2296,7 @@ function EmptyState({ icon, title, text }: { icon: JSX.Element; title: string; t
 }
 
 // ===== TextInput =====
-function TextInput({ label, value, placeholder, onChange }: { label: string; value: string; placeholder?: string; onChange: (value: string) => void }) {
+function TextInput({ label, value, placeholder, onChange }: { label: string; value: string; placeholder?: string; onChange: (value: string) => void; }) {
   return (
     <label className="field">
       <span>{label}</span>
@@ -2704,7 +2306,7 @@ function TextInput({ label, value, placeholder, onChange }: { label: string; val
 }
 
 // ===== TextArea =====
-function TextArea({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+function TextArea({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void; }) {
   return (
     <label className="field full">
       <span>{label}</span>
@@ -2714,19 +2316,12 @@ function TextArea({ label, value, onChange }: { label: string; value: string; on
 }
 
 // ===== ChoiceInput / SelectInput / MiniSelect =====
-interface ChoiceOption {
-  id: string;
-  name: string;
-}
+interface ChoiceOption { id: string; name: string; }
 
 function ChoiceInput({
   label, value, options, placeholder = '请选择', onChange
 }: {
-  label?: string;
-  value: string;
-  options: ChoiceOption[];
-  placeholder?: string;
-  onChange: (value: string) => void;
+  label?: string; value: string; options: ChoiceOption[]; placeholder?: string; onChange: (value: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const selected = options.find((option) => option.id === value);
@@ -2746,15 +2341,9 @@ function ChoiceInput({
           </div>
           <div className="choice-list">
             {options.map((option) => (
-              <button
-                key={option.id}
-                type="button"
+              <button key={option.id} type="button"
                 className={option.id === value ? 'selected' : ''}
-                onClick={() => {
-                  onChange(option.id);
-                  setOpen(false);
-                }}
-              >
+                onClick={() => { onChange(option.id); setOpen(false); }}>
                 <span>{option.name}</span>
                 {option.id === value && <Check size={18} />}
               </button>
@@ -2766,25 +2355,21 @@ function ChoiceInput({
   );
 }
 
-function SelectInput({ label, value, options, onChange }: { label: string; value: string; options: TaxonomyOption[]; onChange: (value: string) => void }) {
+function SelectInput({ label, value, options, onChange }: { label: string; value: string; options: TaxonomyOption[]; onChange: (value: string) => void; }) {
   return <ChoiceInput label={label} value={value} options={options} onChange={onChange} />;
 }
 
-function MiniSelect({ value, options, placeholder, onChange }: { value: string; options: TaxonomyOption[]; placeholder: string; onChange: (value: string) => void }) {
+function MiniSelect({ value, options, placeholder, onChange }: { value: string; options: TaxonomyOption[]; placeholder: string; onChange: (value: string) => void; }) {
   return <ChoiceInput value={value} options={[{ id: '', name: placeholder }, ...options]} placeholder={placeholder} onChange={onChange} />;
 }
 
 // ===== MotionTapButton =====
-function MotionTapButton({
-  children, ...props
-}: ComponentProps<typeof motion.button> & { children: ReactNode }) {
+function MotionTapButton({ children, ...props }: ComponentProps<typeof motion.button> & { children: ReactNode }) {
   const reducedMotion = useReducedMotion();
   return (
-    <motion.button
-      {...props}
+    <motion.button {...props}
       whileTap={props.disabled || reducedMotion ? undefined : { scale: 0.98 }}
-      transition={reducedMotion ? { duration: 0 } : springSnappy}
-    >
+      transition={reducedMotion ? { duration: 0 } : springSnappy}>
       {children}
     </motion.button>
   );
