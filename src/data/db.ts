@@ -130,7 +130,7 @@ export const getSettings = async () => {
   return {
     ...DEFAULT_SETTINGS,
     ...settings,
-    reviewIntervals: settings?.reviewIntervals?.length ? settings.reviewIntervals : DEFAULT_SETTINGS.reviewIntervals
+    reviewIntervals: settings?.reviewIntervals?.length ? settings.reviewIntervals : DEFAULT_REVIEW_INTERVALS
   };
 };
 
@@ -170,6 +170,58 @@ export const addMistake = async (draft: MistakeDraft, images: Omit<ImageAsset, '
   });
 
   return id;
+};
+
+// ===== 更新错题（覆盖，保留 reviewStage / nextReviewAt）=====
+export const updateMistake = async (
+  id: string,
+  draft: MistakeDraft,
+  images: Omit<ImageAsset, 'id' | 'mistakeId' | 'createdAt'>[]
+) => {
+  const existing = await db.mistakes.get(id);
+  if (!existing) throw new Error('错题不存在');
+
+  const updatedAt = now();
+  const taxonomyMap = new Map((await db.taxonomies.toArray()).map((item) => [item.id, item.name]));
+  const sourceName = draft.sourceName.trim() || taxonomyMap.get(draft.sourceId) || '';
+
+  const nextItem: MistakeItem = {
+    ...existing,
+    title: draft.title,
+    note: draft.note,
+    answer: draft.answer,
+    inspiration: draft.inspiration,
+    subjectId: draft.subjectId,
+    causeId: draft.causeId,
+    sourceId: draft.sourceId,
+    subjectName: taxonomyMap.get(draft.subjectId) ?? '',
+    causeName: taxonomyMap.get(draft.causeId) ?? '',
+    sourceName,
+    difficulty: draft.difficulty,
+    updatedAt
+  };
+
+  await db.transaction('rw', db.mistakes, db.images, async () => {
+    await db.mistakes.put(nextItem);
+    await db.images.where('mistakeId').equals(id).delete();
+    await db.images.bulkAdd(
+      images.map((image) => ({
+        ...image,
+        id: uid(),
+        mistakeId: id,
+        createdAt: updatedAt
+      }))
+    );
+  });
+};
+
+// ===== 删除错题 =====
+export const deleteMistake = async (id: string) => {
+  await db.transaction('rw', db.mistakes, db.images, db.reviewLogs, async () => {
+    await db.mistakes.delete(id);
+    await db.images.where('mistakeId').equals(id).delete();
+    await db.reviewLogs.where('mistakeId').equals(id).delete();
+  });
 };
 
 export const addTaxonomy = async (type: TaxonomyType, name: string) => {
