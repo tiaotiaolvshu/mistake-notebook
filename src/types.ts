@@ -6,6 +6,10 @@ export type ReviewResult = 'forgot' | 'struggled' | 'remembered' | 'mastered';
 
 export type ImageRole = 'question' | 'answer';
 
+export type ReviewSessionKind = 'normal' | 'exam';
+
+export type ExamOrderBy = 'created' | 'random' | 'difficulty' | 'progress';
+
 export interface TaxonomyOption {
   id: string;
   type: TaxonomyType;
@@ -88,6 +92,19 @@ export interface MistakeDraft {
   sourceId: string;
   sourceName: string;
   difficulty: Difficulty;
+}
+
+export interface ReviewSessionProgress {
+  kind: ReviewSessionKind;
+  subjectId?: string;
+  subjectName?: string;
+  orderBy?: ExamOrderBy;
+  mistakeIds: string[];
+  currentIndex: number;
+  currentPage: number;
+  answeredResults: Record<string, ReviewResult>;
+  startedAt: string;
+  updatedAt: string;
 }
 
 export interface BackupPayload {
