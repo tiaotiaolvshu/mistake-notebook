@@ -90,7 +90,7 @@ h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin: 0; }
 .tab-button svg { width: 20px; height: 20px; }
 .tab-label { line-height: 1.1; }
 
-/* ===== 分段控制器：网格、居中，跨列文字由 JS 对齐同行首项 ===== */
+/* ===== 分段控制器：网格、居中，跨列文字由 CSS 对齐同行首项 ===== */
 .segmented-wrap {
   position: relative;
   display: grid;
@@ -135,6 +135,20 @@ h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin: 0; }
 .segmented-option-label {
   display: inline-block;
   text-align: center;
+}
+
+/* 跨列选项：让文字落到"同行第 1 列"的中心 */
+.segmented-option.span-multi {
+  padding-right: 0;
+  padding-left: 0;
+  justify-content: center;
+}
+.segmented-option.span-multi .segmented-option-label {
+  /* label 宽度 = 第一列的宽度；margin 自动把 label 推到第 1 列位置 */
+  width: calc((100% - (var(--cols) - 1) * 5px) / var(--cols));
+  flex: 0 0 auto;
+  text-align: center;
+  margin-right: auto;
 }
 
 /* 科目和错因等高 */
