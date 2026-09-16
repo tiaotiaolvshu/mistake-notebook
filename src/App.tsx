@@ -204,14 +204,24 @@ function CenterDialog({
   return createPortal(dialog, document.body);
 }
 
-// ===== 分段控制器 =====
+// ===== 分段控制器（网格 + 自动跨列） =====
 function SegmentedControl<T extends string>({
-  options, value, onChange, label
-}: { options: { id: T; name: string }[]; value: T; onChange: (val: T) => void; label?: string; }) {
+  options, value, onChange, label, columns = 3
+}: {
+  options: { id: T; name: string }[];
+  value: T;
+  onChange: (val: T) => void;
+  label?: string;
+  columns?: number;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [sliderStyle, setSliderStyle] = useState({ left: 0, top: 0, width: 0, height: 0 });
   const [isReady, setIsReady] = useState(false);
   const id = useRef(`seg-${Math.random().toString(36).substring(2, 9)}`);
+
+  const total = options.length;
+  const remainder = total % columns;
+  const lastSpan = remainder === 0 ? 1 : columns - remainder + 1;
 
   const updateSlider = () => {
     if (!containerRef.current) return;
@@ -229,23 +239,40 @@ function SegmentedControl<T extends string>({
     const timeout = setTimeout(updateSlider, 20);
     window.addEventListener('resize', updateSlider);
     return () => { clearTimeout(timeout); window.removeEventListener('resize', updateSlider); };
-  }, [value, options]);
+  }, [value, options, columns]);
 
-  useEffect(() => { updateSlider(); }, [options]);
+  useEffect(() => { updateSlider(); }, [options, columns]);
 
   return (
     <div className="field" style={{ gap: '4px' }}>
       {label && <span>{label}</span>}
-      <div ref={containerRef} className="segmented-wrap">
+      <div
+        ref={containerRef}
+        className="segmented-wrap"
+        style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+      >
         {isReady && (
-          <motion.div layoutId={id.current} transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+          <motion.div
+            layoutId={id.current}
+            transition={{ type: 'spring', stiffness: 500, damping: 30 }}
             className="segmented-slider"
-            style={{ left: sliderStyle.left, top: sliderStyle.top, width: sliderStyle.width, height: sliderStyle.height }} />
+            style={{ left: sliderStyle.left, top: sliderStyle.top, width: sliderStyle.width, height: sliderStyle.height }}
+          />
         )}
-        {options.map((opt) => (
-          <button key={opt.id} className={`segmented-option ${value === opt.id ? 'selected' : ''}`}
-            onClick={() => onChange(opt.id)}>{opt.name}</button>
-        ))}
+        {options.map((opt, i) => {
+          const isLast = i === total - 1;
+          const span = isLast ? lastSpan : 1;
+          return (
+            <button
+              key={opt.id}
+              className={`segmented-option ${value === opt.id ? 'selected' : ''}`}
+              onClick={() => onChange(opt.id)}
+              style={span > 1 ? { gridColumn: `span ${span}` } : undefined}
+            >
+              {opt.name}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -1025,8 +1052,7 @@ function App() {
             initial={reducedMotion ? { opacity: 1 } : { opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={reducedMotion ? { duration: 0 } : fadeSlide}
-            style={{ height: '100%', minHeight: 0 }}>
+            transition={reducedMotion ? { duration: 0 } : fadeSlide}>
             {activeTab === 'today' && (
               <TodayView
                 dueMistakes={dueMistakes}
@@ -1431,16 +1457,16 @@ function ImportView({
               <div className="import-left-col">
                 <SectionHeading title={`第 ${index + 1} 题`} meta={`${item.questionImages.length + item.answerImages.length} 张图片`} />
                 <div className="form-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <SegmentedControl label="科目"
+                  <SegmentedControl label="科目" columns={3}
                     options={taxonomiesByType.subject.map(opt => ({ id: opt.id, name: opt.name }))}
                     value={item.draft.subjectId}
                     onChange={(val) => updateDraft(index, { subjectId: val })} />
-                  <SegmentedControl label="错因"
+                  <SegmentedControl label="错因" columns={2}
                     options={taxonomiesByType.cause.map(opt => ({ id: opt.id, name: opt.name }))}
                     value={item.draft.causeId}
                     onChange={(val) => updateDraft(index, { causeId: val })} />
                   <div className="field full">
-                    <SegmentedControl label="题源"
+                    <SegmentedControl label="题源" columns={3}
                       options={sourceOptions}
                       value={item.draft.sourceId || (sourceOptions.find(o => o.name === item.draft.sourceName)?.id ?? '')}
                       onChange={(val) => {
@@ -1448,7 +1474,7 @@ function ImportView({
                         updateDraft(index, { sourceId: val, sourceName: target?.name ?? '' });
                       }} />
                   </div>
-                  <SegmentedControl label="难度"
+                  <SegmentedControl label="难度" columns={3}
                     options={[
                       { id: 'hard', name: difficultyLabel.hard },
                       { id: 'medium', name: difficultyLabel.medium },
@@ -1784,16 +1810,16 @@ function EditView({
         <div className="import-page-inner">
           <div className="import-left-col">
             <div className="form-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <SegmentedControl label="科目"
+              <SegmentedControl label="科目" columns={3}
                 options={taxonomiesByType.subject.map(opt => ({ id: opt.id, name: opt.name }))}
                 value={draft.subjectId}
                 onChange={(val) => setDraft({ ...draft, subjectId: val })} />
-              <SegmentedControl label="错因"
+              <SegmentedControl label="错因" columns={2}
                 options={taxonomiesByType.cause.map(opt => ({ id: opt.id, name: opt.name }))}
                 value={draft.causeId}
                 onChange={(val) => setDraft({ ...draft, causeId: val })} />
               <div className="field full">
-                <SegmentedControl label="题源"
+                <SegmentedControl label="题源" columns={3}
                   options={sourceOptions}
                   value={draft.sourceId || (sourceOptions.find(o => o.name === draft.sourceName)?.id ?? '')}
                   onChange={(val) => {
@@ -1801,7 +1827,7 @@ function EditView({
                     setDraft({ ...draft, sourceId: val, sourceName: target?.name ?? '' });
                   }} />
               </div>
-              <SegmentedControl label="难度"
+              <SegmentedControl label="难度" columns={3}
                 options={[
                   { id: 'hard', name: difficultyLabel.hard },
                   { id: 'medium', name: difficultyLabel.medium },
@@ -1957,7 +1983,7 @@ function CalendarView({
   const upcomingCount = upcomingDays.reduce((total, date) => total + (countByDay.get(toDateKey(date)) ?? 0), 0);
 
   return (
-    <section className="stack page-scroll">
+    <section className="stack">
       <SectionHeading title="复习日历" meta={`未来35天 ${upcomingCount} 道`} />
       <div className="calendar-panel">
         <div className="calendar-head">
@@ -2030,7 +2056,7 @@ function SettingsView({
   };
 
   return (
-    <section className="stack page-scroll">
+    <section className="stack">
       <SectionHeading title="设置" meta="本机保存" />
       <SettingsAccordion icon={<Tags />} title="分类快捷项" open={open === 'taxonomy'} onToggle={() => setOpen(open === 'taxonomy' ? null : 'taxonomy')}>
         {(['subject', 'cause', 'source'] as TaxonomyType[]).map((type) => (
