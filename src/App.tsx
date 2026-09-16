@@ -204,7 +204,7 @@ function CenterDialog({
   return createPortal(dialog, document.body);
 }
 
-// ===== 分段控制器（网格 + 自动跨列） =====
+// ===== 分段控制器（网格 + 跨列选项文字对齐同行首项） =====
 function SegmentedControl<T extends string>({
   options, value, onChange, label, columns = 3
 }: {
@@ -221,7 +221,23 @@ function SegmentedControl<T extends string>({
 
   const total = options.length;
   const remainder = total % columns;
-  const lastSpan = remainder === 0 ? 1 : columns - remainder + 1;
+
+  const layout = useMemo(() => {
+    const result: { row: number; col: number; span: number }[] = [];
+    let row = 0;
+    let col = 0;
+    options.forEach((_, i) => {
+      const isLast = i === total - 1;
+      const span = isLast && remainder !== 0 ? Math.max(1, columns - col) : 1;
+      result.push({ row, col, span });
+      col += span;
+      if (col >= columns) {
+        row += 1;
+        col = 0;
+      }
+    });
+    return result;
+  }, [options, columns, total, remainder]);
 
   const updateSlider = () => {
     if (!containerRef.current) return;
@@ -235,41 +251,88 @@ function SegmentedControl<T extends string>({
     setIsReady(true);
   };
 
+  const alignSpanningLabels = () => {
+    const wrap = containerRef.current;
+    if (!wrap) return;
+    const btns = Array.from(wrap.querySelectorAll<HTMLElement>('.segmented-option'));
+    btns.forEach((b) => {
+      const lbl = b.querySelector<HTMLElement>('.segmented-option-label');
+      if (lbl) {
+        lbl.style.width = '';
+        lbl.style.marginLeft = '';
+        lbl.style.marginRight = '';
+        lbl.style.textAlign = '';
+        lbl.style.flex = '';
+      }
+    });
+    btns.forEach((btn) => {
+      const span = parseInt(btn.dataset.span || '1', 10);
+      if (span <= 1) return;
+      const row = parseInt(btn.dataset.row || '0', 10);
+      const firstInRow = btns.find((b) => b.dataset.row === String(row) && b.dataset.col === '0');
+      if (!firstInRow || firstInRow === btn) return;
+
+      const firstRect = firstInRow.getBoundingClientRect();
+      const btnRect = btn.getBoundingClientRect();
+      const firstStyle = window.getComputedStyle(firstInRow);
+      const firstPadL = parseFloat(firstStyle.paddingLeft);
+      const firstPadR = parseFloat(firstStyle.paddingRight);
+      const firstContentWidth = firstRect.width - firstPadL - firstPadR;
+
+      const btnStyle = window.getComputedStyle(btn);
+      const btnPadL = parseFloat(btnStyle.paddingLeft);
+
+      const targetContentLeft = firstRect.left - btnRect.left + firstPadL;
+      const extraMarginLeft = targetContentLeft - btnPadL;
+
+      const lbl = btn.querySelector<HTMLElement>('.segmented-option-label');
+      if (lbl) {
+        lbl.style.flex = '0 0 auto';
+        lbl.style.width = `${firstContentWidth}px`;
+        lbl.style.marginLeft = `${extraMarginLeft}px`;
+        lbl.style.marginRight = 'auto';
+        lbl.style.textAlign = 'center';
+      }
+    });
+  };
+
   useEffect(() => {
-    const timeout = setTimeout(updateSlider, 20);
-    window.addEventListener('resize', updateSlider);
-    return () => { clearTimeout(timeout); window.removeEventListener('resize', updateSlider); };
+    const t = window.setTimeout(() => { updateSlider(); alignSpanningLabels(); }, 30);
+    const onResize = () => { updateSlider(); alignSpanningLabels(); };
+    window.addEventListener('resize', onResize);
+    return () => { window.clearTimeout(t); window.removeEventListener('resize', onResize); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, options, columns]);
 
-  useEffect(() => { updateSlider(); }, [options, columns]);
+  useEffect(() => {
+    updateSlider();
+    alignSpanningLabels();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [options, columns]);
 
   return (
     <div className="field" style={{ gap: '4px' }}>
       {label && <span>{label}</span>}
-      <div
-        ref={containerRef}
-        className="segmented-wrap"
-        style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
-      >
+      <div ref={containerRef} className="segmented-wrap"
+        style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
         {isReady && (
-          <motion.div
-            layoutId={id.current}
+          <motion.div layoutId={id.current}
             transition={{ type: 'spring', stiffness: 500, damping: 30 }}
             className="segmented-slider"
-            style={{ left: sliderStyle.left, top: sliderStyle.top, width: sliderStyle.width, height: sliderStyle.height }}
-          />
+            style={{ left: sliderStyle.left, top: sliderStyle.top, width: sliderStyle.width, height: sliderStyle.height }} />
         )}
         {options.map((opt, i) => {
-          const isLast = i === total - 1;
-          const span = isLast ? lastSpan : 1;
+          const item = layout[i];
+          const spanMulti = item.span > 1;
           return (
-            <button
-              key={opt.id}
+            <button key={opt.id}
+              data-row={item.row}
+              data-col={item.col}
+              data-span={item.span}
               className={`segmented-option ${value === opt.id ? 'selected' : ''}`}
               onClick={() => onChange(opt.id)}
-              style={span > 1 ? { gridColumn: `span ${span}` } : undefined}
-            >
-              {opt.name}
+              style={spanMulti ? { gridColumn: `span ${item.span}` } : undefined}>
+              <span className="segmented-option-label">{opt.name}</span>
             </button>
           );
         })}
@@ -593,7 +656,7 @@ function ReviewFullscreen({
   );
 }
 
-// ===== 模式选择弹窗（锚定，跟手） =====
+// ===== 模式选择弹窗 =====
 function ModeDialog({
   open, anchorRect, onCancel, onPickNormal, onPickExam, normalHasSave, examHasSave, normalDueCount
 }: {
@@ -1175,19 +1238,19 @@ function TodayView({
   const hasDue = dueMistakes.length > 0;
   const hasSave = normalHasSave || examHasSave;
   return (
-    <section className="stack animate-card today-tap-area"
+    <section className="animate-card today-tap-area"
       onClick={(e) => onOpenMode(new DOMRect(e.clientX, e.clientY, 0, 0))}
       role="button" tabIndex={0}>
       <SectionHeading title="今日复习" meta={`${dueMistakes.length} 道`} />
       <div className="today-tap-body">
         {hasDue ? (
           <>
-            <p className="today-hint-main">👆 点击屏幕任意位置，选择复习模式</p>
+            <p className="today-hint-main">👆 点击任意位置，选择复习模式</p>
             <p className="today-hint-sub">共 {dueMistakes.length} 道题待复习</p>
           </>
         ) : (
           <>
-            <p className="today-hint-main">👆 点击屏幕任意位置，进入复习</p>
+            <p className="today-hint-main">👆 点击任意位置，进入复习</p>
             <p className="today-hint-sub">今日无到期题，可进入备考模式</p>
           </>
         )}
@@ -1456,7 +1519,7 @@ function ImportView({
             <div className="import-page-inner">
               <div className="import-left-col">
                 <SectionHeading title={`第 ${index + 1} 题`} meta={`${item.questionImages.length + item.answerImages.length} 张图片`} />
-                <div className="form-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="form-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                   <SegmentedControl label="科目" columns={3}
                     options={taxonomiesByType.subject.map(opt => ({ id: opt.id, name: opt.name }))}
                     value={item.draft.subjectId}
@@ -1493,13 +1556,13 @@ function ImportView({
 
                 <div className="field">
                   <span>题目图片</span>
-                  <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
                     <MotionTapButton type="button" onClick={() => handlePickNative(index, 'question')}
-                      style={{ flex: 1, padding: '8px', borderRadius: 'var(--radius-control)', background: 'rgba(61,90,139,0.1)', border: '1px solid var(--line)', fontSize: '0.8rem' }}>
+                      style={{ flex: 1, padding: '7px', borderRadius: 'var(--radius-control)', background: 'rgba(61,90,139,0.1)', border: '1px solid var(--line)', fontSize: '0.8rem' }}>
                       📷 相册
                     </MotionTapButton>
                     <MotionTapButton type="button" onClick={() => handleCamera(index, 'question')}
-                      style={{ flex: 1, padding: '8px', borderRadius: 'var(--radius-control)', background: 'rgba(61,90,139,0.1)', border: '1px solid var(--line)', fontSize: '0.8rem' }}>
+                      style={{ flex: 1, padding: '7px', borderRadius: 'var(--radius-control)', background: 'rgba(61,90,139,0.1)', border: '1px solid var(--line)', fontSize: '0.8rem' }}>
                       📸 拍照
                     </MotionTapButton>
                   </div>
@@ -1518,11 +1581,11 @@ function ImportView({
                   <MotionTapButton type="button" onClick={() => removeItem(index)}
                     style={{
                       display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                      minHeight: 40, borderRadius: 'var(--radius-control)',
+                      minHeight: 36, borderRadius: 'var(--radius-control)',
                       background: 'rgba(196,90,106,0.12)', border: '1px solid rgba(196,90,106,0.3)',
-                      color: '#c45a6a', fontSize: 13, fontWeight: 600, cursor: 'pointer'
+                      color: '#c45a6a', fontSize: 12, fontWeight: 600, cursor: 'pointer'
                     }}>
-                    <X size={16} /> 删除这一题
+                    <X size={14} /> 删除这一题
                   </MotionTapButton>
                 )}
               </div>
@@ -1536,14 +1599,14 @@ function ImportView({
           <span>共 {items.length} 道</span><span>·</span><span>当前第 {currentIndex + 1} 道</span>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button type="button" className="import-add-btn" onClick={addNewItem}><Plus size={15} /> 加一题</button>
+          <button type="button" className="import-add-btn" onClick={addNewItem}><Plus size={14} /> 加一题</button>
           <button type="button" className="import-save-all-btn" disabled={saving} onClick={handleSaveAll}>
             {saving ? '保存中…' : '一键全部保存'}
           </button>
         </div>
       </div>
 
-      {error && <p className="form-error" style={{ padding: '0 20px 12px' }}>{error}</p>}
+      {error && <p className="form-error" style={{ padding: '0 16px 10px' }}>{error}</p>}
       <div className="import-swipe-hint">← 左右滑动可切换题目 →</div>
     </div>
   );
@@ -1809,7 +1872,7 @@ function EditView({
 
         <div className="import-page-inner">
           <div className="import-left-col">
-            <div className="form-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div className="form-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
               <SegmentedControl label="科目" columns={3}
                 options={taxonomiesByType.subject.map(opt => ({ id: opt.id, name: opt.name }))}
                 value={draft.subjectId}
@@ -1849,13 +1912,13 @@ function EditView({
 
             <div className="field">
               <span>题目图片</span>
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
                 <MotionTapButton type="button" onClick={() => handlePickNative('question')}
-                  style={{ flex: 1, padding: '8px', borderRadius: 'var(--radius-control)', background: 'rgba(61,90,139,0.1)', border: '1px solid var(--line)', fontSize: '0.8rem' }}>
+                  style={{ flex: 1, padding: '7px', borderRadius: 'var(--radius-control)', background: 'rgba(61,90,139,0.1)', border: '1px solid var(--line)', fontSize: '0.8rem' }}>
                   📷 相册
                 </MotionTapButton>
                 <MotionTapButton type="button" onClick={() => handleCamera('question')}
-                  style={{ flex: 1, padding: '8px', borderRadius: 'var(--radius-control)', background: 'rgba(61,90,139,0.1)', border: '1px solid var(--line)', fontSize: '0.8rem' }}>
+                  style={{ flex: 1, padding: '7px', borderRadius: 'var(--radius-control)', background: 'rgba(61,90,139,0.1)', border: '1px solid var(--line)', fontSize: '0.8rem' }}>
                   📸 拍照
                 </MotionTapButton>
               </div>
@@ -1895,10 +1958,10 @@ function AnswerField({
   return (
     <div className="field full answer-field">
       <span>答案</span>
-      <textarea value={value} rows={4} onChange={(event) => onChange(event.target.value)} />
+      <textarea value={value} rows={3} onChange={(event) => onChange(event.target.value)} />
       <div className="answer-image-tools">
-        <MotionTapButton type="button" onClick={onGallery}><Images size={18} /> 相册</MotionTapButton>
-        <MotionTapButton type="button" onClick={onCamera}><Camera size={18} /> 拍照</MotionTapButton>
+        <MotionTapButton type="button" onClick={onGallery}><Images size={16} /> 相册</MotionTapButton>
+        <MotionTapButton type="button" onClick={onCamera}><Camera size={16} /> 拍照</MotionTapButton>
       </div>
       <PreviewGrid images={images} onRemove={onRemove} />
     </div>
@@ -2344,7 +2407,7 @@ function TextArea({ label, value, onChange }: { label: string; value: string; on
   return (
     <label className="field full">
       <span>{label}</span>
-      <textarea value={value} rows={4} onChange={(event) => onChange(event.target.value)} />
+      <textarea value={value} rows={2} onChange={(event) => onChange(event.target.value)} />
     </label>
   );
 }
