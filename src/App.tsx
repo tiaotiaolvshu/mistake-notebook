@@ -260,7 +260,6 @@ function SegmentedControl<T extends string>({
 
   useEffect(() => { updateSlider(); }, [options, columns]);
 
-  // 用于给跨列按钮传 --span 和 --first-col，让文字对齐到"同行第 1 列的中心"
   return (
     <div className="field" style={{ gap: '4px' }}>
       {label && <span>{label}</span>}
@@ -1486,15 +1485,13 @@ function ImportView({
                     options={taxonomiesByType.cause.map(opt => ({ id: opt.id, name: opt.name }))}
                     value={item.draft.causeId}
                     onChange={(val) => updateDraft(index, { causeId: val })} />
-                  <div className="field full">
-                    <SegmentedControl label="题源" columns={3}
-                      options={sourceOptions}
-                      value={item.draft.sourceId || (sourceOptions.find(o => o.name === item.draft.sourceName)?.id ?? '')}
-                      onChange={(val) => {
-                        const target = sourceOptions.find(o => o.id === val);
-                        updateDraft(index, { sourceId: val, sourceName: target?.name ?? '' });
-                      }} />
-                  </div>
+                  <SegmentedControl label="题源" columns={3}
+                    options={sourceOptions}
+                    value={item.draft.sourceId || (sourceOptions.find(o => o.name === item.draft.sourceName)?.id ?? '')}
+                    onChange={(val) => {
+                      const target = sourceOptions.find(o => o.id === val);
+                      updateDraft(index, { sourceId: val, sourceName: target?.name ?? '' });
+                    }} />
                   <SegmentedControl label="难度" columns={3}
                     options={[
                       { id: 'hard', name: difficultyLabel.hard },
@@ -1504,7 +1501,7 @@ function ImportView({
                     value={item.draft.difficulty}
                     onChange={(val) => updateDraft(index, { difficulty: val as Difficulty })} />
                   <TextArea label="备注" value={item.draft.note} onChange={(note) => updateDraft(index, { note })} />
-                  <TextArea label="启发" value={item.draft.inspiration} onChange={(inspiration) => updateDraft(index, { inspiration })} />
+                  <TextArea label="启发" rows={5} value={item.draft.inspiration} onChange={(inspiration) => updateDraft(index, { inspiration })} />
                 </div>
               </div>
 
@@ -1839,15 +1836,13 @@ function EditView({
                 options={taxonomiesByType.cause.map(opt => ({ id: opt.id, name: opt.name }))}
                 value={draft.causeId}
                 onChange={(val) => setDraft({ ...draft, causeId: val })} />
-              <div className="field full">
-                <SegmentedControl label="题源" columns={3}
-                  options={sourceOptions}
-                  value={draft.sourceId || (sourceOptions.find(o => o.name === draft.sourceName)?.id ?? '')}
-                  onChange={(val) => {
-                    const target = sourceOptions.find(o => o.id === val);
-                    setDraft({ ...draft, sourceId: val, sourceName: target?.name ?? '' });
-                  }} />
-              </div>
+              <SegmentedControl label="题源" columns={3}
+                options={sourceOptions}
+                value={draft.sourceId || (sourceOptions.find(o => o.name === draft.sourceName)?.id ?? '')}
+                onChange={(val) => {
+                  const target = sourceOptions.find(o => o.id === val);
+                  setDraft({ ...draft, sourceId: val, sourceName: target?.name ?? '' });
+                }} />
               <SegmentedControl label="难度" columns={3}
                 options={[
                   { id: 'hard', name: difficultyLabel.hard },
@@ -1857,7 +1852,7 @@ function EditView({
                 value={draft.difficulty}
                 onChange={(val) => setDraft({ ...draft, difficulty: val as Difficulty })} />
               <TextArea label="备注" value={draft.note} onChange={(note) => setDraft({ ...draft, note })} />
-              <TextArea label="启发" value={draft.inspiration} onChange={(inspiration) => setDraft({ ...draft, inspiration })} />
+              <TextArea label="启发" rows={5} value={draft.inspiration} onChange={(inspiration) => setDraft({ ...draft, inspiration })} />
             </div>
           </div>
 
@@ -2361,11 +2356,11 @@ function TextInput({ label, value, placeholder, onChange }: { label: string; val
 }
 
 // ===== TextArea =====
-function TextArea({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void; }) {
+function TextArea({ label, value, onChange, rows = 2 }: { label: string; value: string; onChange: (value: string) => void; rows?: number; }) {
   return (
     <label className="field full">
       <span>{label}</span>
-      <textarea value={value} rows={2} onChange={(event) => onChange(event.target.value)} />
+      <textarea value={value} rows={rows} onChange={(event) => onChange(event.target.value)} />
     </label>
   );
 }
