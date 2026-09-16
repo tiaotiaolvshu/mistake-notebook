@@ -144,7 +144,6 @@ h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin: 0; }
   justify-content: center;
 }
 .segmented-option.span-multi .segmented-option-label {
-  /* label 宽度 = 本段第一列的宽度；margin 自动把 label 推到本段第 1 列位置 */
   width: calc((100% - (var(--span) - 1) * 5px) / var(--span));
   flex: 0 0 auto;
   text-align: center;
@@ -376,7 +375,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
 }
 .inline-filter-label { position: relative; z-index: 1; white-space: nowrap; }
 
-/* ===== 首页：无白卡片，整片可点 ===== */
+/* ===== 首页：整片可点，带描边 + 白色模糊遮罩 ===== */
 .today-tap-area {
   cursor: pointer;
   border-radius: var(--radius-card);
@@ -387,6 +386,11 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
   justify-content: center;
   padding: 60px 20px 40px;
   user-select: none;
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  background: rgba(255, 255, 255, 0.32);
+  backdrop-filter: blur(20px) saturate(1.2);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  box-shadow: var(--shadow-soft);
 }
 .today-tap-area .section-heading {
   position: absolute;
