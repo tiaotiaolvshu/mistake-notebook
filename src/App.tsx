@@ -221,11 +221,7 @@ function SegmentedControl<T extends string>({
     const btn = buttons[index] as HTMLElement;
     const rect = btn.getBoundingClientRect();
     const containerRect = containerRef.current.getBoundingClientRect();
-    setSliderStyle({
-      left: rect.left - containerRect.left,
-      top: rect.top - containerRect.top,
-      width: rect.width, height: rect.height,
-    });
+    setSliderStyle({ left: rect.left - containerRect.left, top: rect.top - containerRect.top, width: rect.width, height: rect.height });
     setIsReady(true);
   };
 
@@ -570,15 +566,21 @@ function ReviewFullscreen({
   );
 }
 
-// ===== 模式选择弹窗 =====
+// ===== 模式选择弹窗（锚定，跟手） =====
 function ModeDialog({
-  open, onCancel, onPickNormal, onPickExam, normalHasSave, examHasSave, normalDueCount
+  open, anchorRect, onCancel, onPickNormal, onPickExam, normalHasSave, examHasSave, normalDueCount
 }: {
-  open: boolean; onCancel: () => void; onPickNormal: () => void; onPickExam: () => void;
-  normalHasSave: boolean; examHasSave: boolean; normalDueCount: number;
+  open: boolean;
+  anchorRect: DOMRect | null;
+  onCancel: () => void;
+  onPickNormal: () => void;
+  onPickExam: () => void;
+  normalHasSave: boolean;
+  examHasSave: boolean;
+  normalDueCount: number;
 }) {
   return (
-    <CenterDialog open={open} onCancel={onCancel}>
+    <AnchorDialog open={open} anchorRect={anchorRect} onCancel={onCancel}>
       <div className="mode-dialog">
         <h2 className="mode-dialog-title">选择复习模式</h2>
         <button type="button" className="mode-card" onClick={onPickNormal}>
@@ -601,7 +603,7 @@ function ModeDialog({
         </button>
         <button type="button" className="mode-cancel" onClick={onCancel}>取消</button>
       </div>
-    </CenterDialog>
+    </AnchorDialog>
   );
 }
 
@@ -707,6 +709,7 @@ function App() {
   const [importIndex, setImportIndex] = useState(0);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [modeDialogOpen, setModeDialogOpen] = useState(false);
+  const [modeDialogAnchor, setModeDialogAnchor] = useState<DOMRect | null>(null);
   const [examSetupOpen, setExamSetupOpen] = useState(false);
   const [resumeKind, setResumeKind] = useState<ReviewSessionKind | null>(null);
   const [reviewSession, setReviewSession] = useState<{
@@ -856,7 +859,8 @@ function App() {
     setToast('已恢复备份');
   };
 
-  const openModeDialog = () => {
+  const openModeDialog = (rect?: DOMRect) => {
+    setModeDialogAnchor(rect ?? null);
     setNormalHasSave(!!loadSession('normal'));
     setExamHasSave(!!loadSession('exam'));
     setModeDialogOpen(true);
@@ -1021,7 +1025,8 @@ function App() {
             initial={reducedMotion ? { opacity: 1 } : { opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={reducedMotion ? { duration: 0 } : fadeSlide}>
+            transition={reducedMotion ? { duration: 0 } : fadeSlide}
+            style={{ height: '100%', minHeight: 0 }}>
             {activeTab === 'today' && (
               <TodayView
                 dueMistakes={dueMistakes}
@@ -1096,6 +1101,7 @@ function App() {
       </AnimatePresence>
 
       <ModeDialog open={modeDialogOpen}
+        anchorRect={modeDialogAnchor}
         onCancel={() => setModeDialogOpen(false)}
         onPickNormal={handlePickNormal}
         onPickExam={handlePickExam}
@@ -1139,11 +1145,13 @@ function TabButton({ active, icon, label, onClick }: { active: boolean; icon: JS
 // ===== TodayView =====
 function TodayView({
   dueMistakes, onOpenMode, normalHasSave, examHasSave
-}: { dueMistakes: MistakeItem[]; onOpenMode: () => void; normalHasSave: boolean; examHasSave: boolean; }) {
+}: { dueMistakes: MistakeItem[]; onOpenMode: (rect?: DOMRect) => void; normalHasSave: boolean; examHasSave: boolean; }) {
   const hasDue = dueMistakes.length > 0;
   const hasSave = normalHasSave || examHasSave;
   return (
-    <section className="stack animate-card today-tap-area" onClick={onOpenMode} role="button" tabIndex={0}>
+    <section className="stack animate-card today-tap-area"
+      onClick={(e) => onOpenMode(new DOMRect(e.clientX, e.clientY, 0, 0))}
+      role="button" tabIndex={0}>
       <SectionHeading title="今日复习" meta={`${dueMistakes.length} 道`} />
       <div className="today-tap-body">
         {hasDue ? (
@@ -1515,7 +1523,7 @@ function ImportView({
   );
 }
 
-// ===== GalleryView（带归档/恢复切换） =====
+// ===== GalleryView =====
 function GalleryView({
   mistakes, imagesByMistake, taxonomyMap, taxonomiesByType, onArchive, onEdit, onDelete
 }: {
@@ -1949,7 +1957,7 @@ function CalendarView({
   const upcomingCount = upcomingDays.reduce((total, date) => total + (countByDay.get(toDateKey(date)) ?? 0), 0);
 
   return (
-    <section className="stack">
+    <section className="stack page-scroll">
       <SectionHeading title="复习日历" meta={`未来35天 ${upcomingCount} 道`} />
       <div className="calendar-panel">
         <div className="calendar-head">
@@ -2022,7 +2030,7 @@ function SettingsView({
   };
 
   return (
-    <section className="stack">
+    <section className="stack page-scroll">
       <SectionHeading title="设置" meta="本机保存" />
       <SettingsAccordion icon={<Tags />} title="分类快捷项" open={open === 'taxonomy'} onToggle={() => setOpen(open === 'taxonomy' ? null : 'taxonomy')}>
         {(['subject', 'cause', 'source'] as TaxonomyType[]).map((type) => (
@@ -2146,7 +2154,7 @@ function TaxonomyEditor({ item, onRefresh }: { item: TaxonomyOption; onRefresh: 
   );
 }
 
-// ===== MistakeCard（带归档/恢复按钮） =====
+// ===== MistakeCard =====
 function MistakeCard({
   mistake, images, taxonomyMap, compact = false, footer, onArchive, onEdit, onRequestDelete, archiveLabel
 }: {
