@@ -204,7 +204,7 @@ function CenterDialog({
   return createPortal(dialog, document.body);
 }
 
-// ===== 分段控制器（网格 + 跨列选项文字对齐同行首项） =====
+// ===== 分段控制器（网格 + 跨列选项文字对齐同行首项，纯 CSS 方案） =====
 function SegmentedControl<T extends string>({
   options, value, onChange, label, columns = 3
 }: {
@@ -251,70 +251,24 @@ function SegmentedControl<T extends string>({
     setIsReady(true);
   };
 
-  const alignSpanningLabels = () => {
-    const wrap = containerRef.current;
-    if (!wrap) return;
-    const btns = Array.from(wrap.querySelectorAll<HTMLElement>('.segmented-option'));
-    btns.forEach((b) => {
-      const lbl = b.querySelector<HTMLElement>('.segmented-option-label');
-      if (lbl) {
-        lbl.style.width = '';
-        lbl.style.marginLeft = '';
-        lbl.style.marginRight = '';
-        lbl.style.textAlign = '';
-        lbl.style.flex = '';
-      }
-    });
-    btns.forEach((btn) => {
-      const span = parseInt(btn.dataset.span || '1', 10);
-      if (span <= 1) return;
-      const row = parseInt(btn.dataset.row || '0', 10);
-      const firstInRow = btns.find((b) => b.dataset.row === String(row) && b.dataset.col === '0');
-      if (!firstInRow || firstInRow === btn) return;
-
-      const firstRect = firstInRow.getBoundingClientRect();
-      const btnRect = btn.getBoundingClientRect();
-      const firstStyle = window.getComputedStyle(firstInRow);
-      const firstPadL = parseFloat(firstStyle.paddingLeft);
-      const firstPadR = parseFloat(firstStyle.paddingRight);
-      const firstContentWidth = firstRect.width - firstPadL - firstPadR;
-
-      const btnStyle = window.getComputedStyle(btn);
-      const btnPadL = parseFloat(btnStyle.paddingLeft);
-
-      const targetContentLeft = firstRect.left - btnRect.left + firstPadL;
-      const extraMarginLeft = targetContentLeft - btnPadL;
-
-      const lbl = btn.querySelector<HTMLElement>('.segmented-option-label');
-      if (lbl) {
-        lbl.style.flex = '0 0 auto';
-        lbl.style.width = `${firstContentWidth}px`;
-        lbl.style.marginLeft = `${extraMarginLeft}px`;
-        lbl.style.marginRight = 'auto';
-        lbl.style.textAlign = 'center';
-      }
-    });
-  };
-
   useEffect(() => {
-    const t = window.setTimeout(() => { updateSlider(); alignSpanningLabels(); }, 30);
-    const onResize = () => { updateSlider(); alignSpanningLabels(); };
-    window.addEventListener('resize', onResize);
-    return () => { window.clearTimeout(t); window.removeEventListener('resize', onResize); };
+    const t = window.setTimeout(updateSlider, 30);
+    window.addEventListener('resize', updateSlider);
+    return () => { window.clearTimeout(t); window.removeEventListener('resize', updateSlider); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, options, columns]);
 
-  useEffect(() => {
-    updateSlider();
-    alignSpanningLabels();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [options, columns]);
+  useEffect(() => { updateSlider(); }, [options, columns]);
 
+  // 用于给跨列按钮传 --span 和 --first-col，让文字对齐到"同行第 1 列的中心"
   return (
     <div className="field" style={{ gap: '4px' }}>
       {label && <span>{label}</span>}
       <div ref={containerRef} className="segmented-wrap"
-        style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
+        style={{
+          gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+          ['--cols' as string]: columns,
+        }}>
         {isReady && (
           <motion.div layoutId={id.current}
             transition={{ type: 'spring', stiffness: 500, damping: 30 }}
@@ -329,9 +283,13 @@ function SegmentedControl<T extends string>({
               data-row={item.row}
               data-col={item.col}
               data-span={item.span}
-              className={`segmented-option ${value === opt.id ? 'selected' : ''}`}
+              className={`segmented-option ${value === opt.id ? 'selected' : ''} ${spanMulti ? 'span-multi' : ''}`}
               onClick={() => onChange(opt.id)}
-              style={spanMulti ? { gridColumn: `span ${item.span}` } : undefined}>
+              style={spanMulti ? {
+                gridColumn: `span ${item.span}`,
+                ['--span' as string]: item.span,
+                ['--first-col' as string]: 1
+              } : undefined}>
               <span className="segmented-option-label">{opt.name}</span>
             </button>
           );
