@@ -137,15 +137,15 @@ h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin: 0; }
   text-align: center;
 }
 
-/* 跨列选项：让文字落到"同行第 1 列"的中心 */
+/* 跨列选项：让文字落到"本段第 1 列"的中心 */
 .segmented-option.span-multi {
   padding-right: 0;
   padding-left: 0;
   justify-content: center;
 }
 .segmented-option.span-multi .segmented-option-label {
-  /* label 宽度 = 第一列的宽度；margin 自动把 label 推到第 1 列位置 */
-  width: calc((100% - (var(--cols) - 1) * 5px) / var(--cols));
+  /* label 宽度 = 本段第一列的宽度；margin 自动把 label 推到本段第 1 列位置 */
+  width: calc((100% - (var(--span) - 1) * 5px) / var(--span));
   flex: 0 0 auto;
   text-align: center;
   margin-right: auto;
