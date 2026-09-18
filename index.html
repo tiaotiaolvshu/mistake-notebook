@@ -3,8 +3,27 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#f8fbff" />
+    <meta name="theme-color" content="#f8fbff" id="theme-color-meta" />
     <title>错题本</title>
+    <script>
+      // 在 React 挂载前同步应用主题，避免首帧闪烁
+      (function () {
+        try {
+          var t = localStorage.getItem('cuotiben.theme.v1');
+          if (t) document.documentElement.setAttribute('data-theme', t);
+          // 状态栏颜色跟着主题走
+          var colors = {
+            xuanzhi: '#f4efe4',
+            qinghua: '#eef2f7',
+            moyu:    '#16161a',
+            yanzhi:  '#f6ece9',
+            zhuqing: '#edf2ec'
+          };
+          var meta = document.getElementById('theme-color-meta');
+          if (meta && t && colors[t]) meta.setAttribute('content', colors[t]);
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
