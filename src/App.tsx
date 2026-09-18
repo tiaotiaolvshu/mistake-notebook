@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import {
   Archive, BookOpen, CalendarDays, Camera, Check, ChevronDown, Database, Download,
-  GraduationCap, ImagePlus, Images, MoreHorizontal, Pencil, Plus, RotateCcw,
+  GraduationCap, ImagePlus, Images, MoreHorizontal, Palette, Pencil, Plus, RotateCcw,
   Settings, SlidersHorizontal, Tags, Trash2, X,
 } from 'lucide-react';
 import {
@@ -22,7 +22,9 @@ import type {
 } from './types';
 
 type TabKey = 'today' | 'import' | 'gallery' | 'calendar' | 'settings' | 'review' | 'edit';
-type SettingsPanel = 'taxonomy' | 'review' | 'backup' | 'storage';
+type SettingsPanel = 'taxonomy' | 'review' | 'theme' | 'backup' | 'storage';
+
+type ThemeId = 'xuanzhi' | 'qinghua' | 'moyu' | 'yanzhi' | 'zhuqing';
 
 interface PendingImage { id: string; file: File; url: string; }
 interface ImportItem {
@@ -35,6 +37,24 @@ interface ImportItem {
 const taxonomyTitles: Record<TaxonomyType, string> = { subject: '科目', cause: '错因', source: '题源快捷项' };
 
 const ALL_SUBJECTS_ID = '__all__';
+
+const THEMES: { id: ThemeId; name: string }[] = [
+  { id: 'xuanzhi', name: '宣纸' },
+  { id: 'qinghua', name: '青花' },
+  { id: 'moyu',    name: '墨玉' },
+  { id: 'yanzhi',  name: '胭脂' },
+  { id: 'zhuqing', name: '竹青' },
+];
+
+const THEME_COLORS: Record<ThemeId, string> = {
+  xuanzhi: '#f4efe4',
+  qinghua: '#eef2f7',
+  moyu:    '#16161a',
+  yanzhi:  '#f6ece9',
+  zhuqing: '#edf2ec',
+};
+
+const THEME_KEY = 'cuotiben.theme.v1';
 
 const emptyDraft: MistakeDraft = {
   title: '', note: '', answer: '', inspiration: '',
@@ -52,6 +72,9 @@ const createEmptyItem = (defaults?: Partial<MistakeDraft>): ImportItem => ({
 const springSoft = { duration: 0.08, ease: 'easeOut' } as const;
 const springSnappy = { duration: 0.08, ease: 'easeOut' } as const;
 const fadeSlide = { duration: 0.06, ease: 'easeOut' } as const;
+const pillTransition = { type: 'spring' as const, stiffness: 520, damping: 26, mass: 0.75, restDelta: 0.001 };
+const pillTransitionSoft = { type: 'spring' as const, stiffness: 460, damping: 30, mass: 0.8, restDelta: 0.001 };
+
 const IMPORT_ITEMS_KEY = 'cuotiben.importItems.v2';
 const IMPORT_LEGACY_DRAFT_KEY = 'cuotiben.importDraft.v1';
 const NORMAL_SESSION_KEY = 'cuotiben.reviewSession.normal.v1';
@@ -76,6 +99,14 @@ const draftAssetToPending = (asset: DraftImageAsset): PendingImage => {
 const imageAssetToPending = (asset: ImageAsset): PendingImage => {
   const file = new File([asset.imageBlob], `edit-${asset.id}.jpg`, { type: asset.imageBlob.type || 'image/jpeg' });
   return { id: asset.id, file, url: URL.createObjectURL(file) };
+};
+
+const loadTheme = (): ThemeId => {
+  try {
+    const saved = window.localStorage.getItem(THEME_KEY) as ThemeId | null;
+    if (saved && THEMES.some(t => t.id === saved)) return saved;
+  } catch {}
+  return 'moyu';
 };
 
 const loadImportItems = (): ImportItem[] => {
@@ -687,6 +718,25 @@ function ExamSetupDialog({
     onStart(subjectId, target.name, orderBy, includeArchived);
   };
 
+  const renderChip = (
+    key: string,
+    layoutId: string,
+    active: boolean,
+    label: string,
+    onClick: () => void
+  ) => (
+    <button key={key} type="button"
+      className={`exam-setup-chip ${active ? 'active' : ''}`}
+      onClick={onClick}>
+      {active && (
+        <motion.span layoutId={layoutId}
+          className="exam-setup-pill"
+          transition={pillTransition} />
+      )}
+      <span className="exam-setup-chip-label">{label}</span>
+    </button>
+  );
+
   return (
     <CenterDialog open={open} onCancel={onCancel}>
       <div className="exam-setup-dialog">
@@ -697,10 +747,12 @@ function ExamSetupDialog({
             <div className="exam-setup-empty">还没有科目，去设置里添加</div>
           ) : (
             <div className="exam-setup-chips">
-              {subjects.map((s) => (
-                <button key={s.id} type="button"
-                  className={`exam-setup-chip ${subjectId === s.id ? 'active' : ''}`}
-                  onClick={() => setSubjectId(s.id)}>{s.name}</button>
+              {subjects.map((s) => renderChip(
+                s.id,
+                'exam-subject-pill',
+                subjectId === s.id,
+                s.name,
+                () => setSubjectId(s.id)
               ))}
             </div>
           )}
@@ -708,22 +760,20 @@ function ExamSetupDialog({
         <div className="exam-setup-section">
           <div className="exam-setup-label">题目顺序</div>
           <div className="exam-setup-chips">
-            {orderOptions.map((o) => (
-              <button key={o.id} type="button"
-                className={`exam-setup-chip ${orderBy === o.id ? 'active' : ''}`}
-                onClick={() => setOrderBy(o.id)}>{o.name}</button>
+            {orderOptions.map((o) => renderChip(
+              o.id,
+              'exam-order-pill',
+              orderBy === o.id,
+              o.name,
+              () => setOrderBy(o.id)
             ))}
           </div>
         </div>
         <div className="exam-setup-section">
           <div className="exam-setup-label">已归档的题</div>
           <div className="exam-setup-chips">
-            <button type="button"
-              className={`exam-setup-chip ${!includeArchived ? 'active' : ''}`}
-              onClick={() => setIncludeArchived(false)}>不包含</button>
-            <button type="button"
-              className={`exam-setup-chip ${includeArchived ? 'active' : ''}`}
-              onClick={() => setIncludeArchived(true)}>一起过</button>
+            {renderChip('excl', 'exam-archived-pill', !includeArchived, '不包含', () => setIncludeArchived(false))}
+            {renderChip('incl', 'exam-archived-pill', includeArchived, '一起过', () => setIncludeArchived(true))}
           </div>
         </div>
         <div className="exam-setup-actions">
@@ -779,9 +829,18 @@ function App() {
   } | null>(null);
   const [normalHasSave, setNormalHasSave] = useState(false);
   const [examHasSave, setExamHasSave] = useState(false);
+  const [theme, setTheme] = useState<ThemeId>(() => loadTheme());
   const importItemsRef = useRef<ImportItem[]>([]);
   const draftImagesLoadedRef = useRef(false);
   const galleryScrollRef = useRef<number>(0);
+
+  // 应用主题 + 同步状态栏颜色
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    try { window.localStorage.setItem(THEME_KEY, theme); } catch {}
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', THEME_COLORS[theme]);
+  }, [theme]);
 
   const refresh = async () => {
     const [nextMistakes, nextImages, nextTaxonomies, nextSettings] = await Promise.all([
@@ -1150,6 +1209,8 @@ function App() {
               <SettingsView
                 settings={settings}
                 taxonomiesByType={taxonomiesByType}
+                theme={theme}
+                onThemeChange={setTheme}
                 onRefresh={refresh}
                 onExport={async () => { const message = await exportBackup(); setToast(message); }}
                 onImport={handleImportBackup}
@@ -1232,7 +1293,6 @@ function TodayView({
     <section className="animate-card today-tap-area"
       onClick={(e) => onOpenMode(new DOMRect(e.clientX, e.clientY, 0, 0))}
       role="button" tabIndex={0}>
-      <SectionHeading title="今日复习" meta={`${dueMistakes.length} 道`} />
       <div className="today-tap-body">
         {hasDue ? (
           <>
@@ -1471,7 +1531,6 @@ function ImportView({
     }
   };
 
-  const pillTransition = { type: 'spring' as const, stiffness: 500, damping: 26, mass: 0.8, restDelta: 0.001 };
   const sourceOptions = taxonomiesByType.source.map(opt => ({ id: opt.id, name: opt.name }));
 
   return (
@@ -1547,11 +1606,11 @@ function ImportView({
                   <span>题目图片</span>
                   <div style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
                     <MotionTapButton type="button" onClick={() => handlePickNative(index, 'question')}
-                      style={{ flex: 1, padding: '7px', borderRadius: 'var(--radius-control)', background: 'rgba(61,90,139,0.1)', border: '1px solid var(--line)', fontSize: '0.8rem' }}>
+                      style={{ flex: 1, padding: '7px', borderRadius: 'var(--radius-control)', background: 'var(--primary-soft)', border: '1px solid var(--line)', fontSize: '0.8rem', color: 'var(--primary)' }}>
                       📷 相册
                     </MotionTapButton>
                     <MotionTapButton type="button" onClick={() => handleCamera(index, 'question')}
-                      style={{ flex: 1, padding: '7px', borderRadius: 'var(--radius-control)', background: 'rgba(61,90,139,0.1)', border: '1px solid var(--line)', fontSize: '0.8rem' }}>
+                      style={{ flex: 1, padding: '7px', borderRadius: 'var(--radius-control)', background: 'var(--primary-soft)', border: '1px solid var(--line)', fontSize: '0.8rem', color: 'var(--primary)' }}>
                       📸 拍照
                     </MotionTapButton>
                   </div>
@@ -1571,8 +1630,8 @@ function ImportView({
                     style={{
                       display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                       minHeight: 36, borderRadius: 'var(--radius-control)',
-                      background: 'rgba(196,90,106,0.12)', border: '1px solid rgba(196,90,106,0.3)',
-                      color: '#c45a6a', fontSize: 12, fontWeight: 600, cursor: 'pointer'
+                      background: 'var(--danger-soft)', border: '1px solid var(--danger-line)',
+                      color: 'var(--danger)', fontSize: 12, fontWeight: 600, cursor: 'pointer'
                     }}>
                     <X size={14} /> 删除这一题
                   </MotionTapButton>
@@ -1641,11 +1700,27 @@ function GalleryView({
       <div className="gallery-head">
         <SectionHeading title={showArchived ? '已归档' : '错题画廊'} meta={`${filtered.length} 道`} />
         <div className="gallery-mode-switch">
-          <button type="button" className={`gallery-mode-btn ${!showArchived ? 'active' : ''}`} onClick={() => setShowArchived(false)}>
-            未归档
+          <button type="button"
+            className={`gallery-mode-btn ${!showArchived ? 'active' : ''}`}
+            onClick={() => setShowArchived(false)}>
+            {!showArchived && (
+              <motion.span layoutId="gallery-mode-pill"
+                className="gallery-mode-pill"
+                transition={pillTransitionSoft} />
+            )}
+            <span className="gallery-mode-btn-label">未归档</span>
           </button>
-          <button type="button" className={`gallery-mode-btn ${showArchived ? 'active' : ''}`} onClick={() => setShowArchived(true)}>
-            已归档{archivedCount > 0 ? ` · ${archivedCount}` : ''}
+          <button type="button"
+            className={`gallery-mode-btn ${showArchived ? 'active' : ''}`}
+            onClick={() => setShowArchived(true)}>
+            {showArchived && (
+              <motion.span layoutId="gallery-mode-pill"
+                className="gallery-mode-pill"
+                transition={pillTransitionSoft} />
+            )}
+            <span className="gallery-mode-btn-label">
+              已归档{archivedCount > 0 ? ` · ${archivedCount}` : ''}
+            </span>
           </button>
         </div>
       </div>
@@ -1700,8 +1775,6 @@ function InlineFilterGroup({
   groupKey: string; allLabel: string; options: { id: string; name: string }[];
   value: string; onChange: (value: string) => void;
 }) {
-  const pillTransition = { type: 'spring' as const, stiffness: 520, damping: 24, mass: 0.7, restDelta: 0.001 };
-
   const renderChip = (id: string, label: string) => {
     const selected = value === id;
     return (
@@ -1890,11 +1963,11 @@ function EditView({
               <span>题目图片</span>
               <div style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
                 <MotionTapButton type="button" onClick={() => handlePickNative('question')}
-                  style={{ flex: 1, padding: '7px', borderRadius: 'var(--radius-control)', background: 'rgba(61,90,139,0.1)', border: '1px solid var(--line)', fontSize: '0.8rem' }}>
+                  style={{ flex: 1, padding: '7px', borderRadius: 'var(--radius-control)', background: 'var(--primary-soft)', border: '1px solid var(--line)', fontSize: '0.8rem', color: 'var(--primary)' }}>
                   📷 相册
                 </MotionTapButton>
                 <MotionTapButton type="button" onClick={() => handleCamera('question')}
-                  style={{ flex: 1, padding: '7px', borderRadius: 'var(--radius-control)', background: 'rgba(61,90,139,0.1)', border: '1px solid var(--line)', fontSize: '0.8rem' }}>
+                  style={{ flex: 1, padding: '7px', borderRadius: 'var(--radius-control)', background: 'var(--primary-soft)', border: '1px solid var(--line)', fontSize: '0.8rem', color: 'var(--primary)' }}>
                   📸 拍照
                 </MotionTapButton>
               </div>
@@ -2078,10 +2151,12 @@ function CalendarView({
 
 // ===== SettingsView =====
 function SettingsView({
-  settings, taxonomiesByType, onRefresh, onExport, onImport, onToast
+  settings, taxonomiesByType, theme, onThemeChange, onRefresh, onExport, onImport, onToast
 }: {
   settings: AppSettings;
   taxonomiesByType: Record<TaxonomyType, TaxonomyOption[]>;
+  theme: ThemeId;
+  onThemeChange: (id: ThemeId) => void;
   onRefresh: () => Promise<void>;
   onExport: () => Promise<void>;
   onImport: (file: File) => Promise<void>;
@@ -2135,6 +2210,30 @@ function SettingsView({
         </label>
         <ReviewPreview intervals={parsedIntervals} />
         <button type="button" className="mini-primary" onClick={handleSaveIntervals}>保存策略</button>
+      </SettingsAccordion>
+
+      <SettingsAccordion icon={<Palette />} title="主题" open={open === 'theme'} onToggle={() => setOpen(open === 'theme' ? null : 'theme')}>
+        <div className="theme-chips">
+          {THEMES.map((t) => {
+            const active = theme === t.id;
+            return (
+              <button key={t.id} type="button"
+                className={`theme-chip ${active ? 'active' : ''}`}
+                onClick={() => onThemeChange(t.id)}>
+                {active && (
+                  <motion.span layoutId="theme-pill"
+                    className="theme-pill"
+                    transition={pillTransitionSoft} />
+                )}
+                <span className="theme-dot" data-theme-dot={t.id} aria-hidden="true">
+                  <span className="theme-dot-bg" />
+                  <span className="theme-dot-accent" />
+                </span>
+                <span className="theme-chip-name">{t.name}</span>
+              </button>
+            );
+          })}
+        </div>
       </SettingsAccordion>
 
       <SettingsAccordion icon={<Download />} title="数据备份" open={open === 'backup'} onToggle={() => setOpen(open === 'backup' ? null : 'backup')}>
@@ -2364,7 +2463,7 @@ function SectionHeading({ title, meta }: { title: string; meta?: string }) {
   return (
     <div className="section-heading">
       <h2>{title}</h2>
-      {meta && <span>{meta}</span>}
+      {meta && <span className="section-heading-meta">{meta}</span>}
     </div>
   );
 }
