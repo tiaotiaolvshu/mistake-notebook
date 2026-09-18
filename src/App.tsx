@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import {
   Archive, BookOpen, CalendarDays, Camera, Check, ChevronDown, Database, Download,
-  GraduationCap, ImagePlus, Images, MoreHorizontal, Pencil, Plus, RotateCcw, Search,
+  GraduationCap, ImagePlus, Images, MoreHorizontal, Pencil, Plus, RotateCcw,
   Settings, SlidersHorizontal, Tags, Trash2, X,
 } from 'lucide-react';
 import {
@@ -33,6 +33,8 @@ interface ImportItem {
 }
 
 const taxonomyTitles: Record<TaxonomyType, string> = { subject: '科目', cause: '错因', source: '题源快捷项' };
+
+const ALL_SUBJECTS_ID = '__all__';
 
 const emptyDraft: MistakeDraft = {
   title: '', note: '', answer: '', inspiration: '',
@@ -204,7 +206,7 @@ function CenterDialog({
   return createPortal(dialog, document.body);
 }
 
-// ===== 分段控制器（网格 + 跨列选项文字对齐同行首项，纯 CSS 方案） =====
+// ===== 分段控制器 =====
 function SegmentedControl<T extends string>({
   options, value, onChange, label, columns = 3
 }: {
@@ -644,7 +646,7 @@ function ModeDialog({
           <div className="mode-card-icon mode-icon-exam"><GraduationCap size={22} /></div>
           <div className="mode-card-body">
             <div className="mode-card-name">备考模式</div>
-            <div className="mode-card-desc">选一科，把该科所有错题过一遍</div>
+            <div className="mode-card-desc">选一科或全部，把题过一遍</div>
             {examHasSave && <span className="mode-card-badge">有未完成的进度</span>}
           </div>
         </button>
@@ -658,16 +660,18 @@ function ModeDialog({
 function ExamSetupDialog({
   open, subjects, onCancel, onStart
 }: {
-  open: boolean; subjects: TaxonomyOption[]; onCancel: () => void;
-  onStart: (subjectId: string, subjectName: string, orderBy: ExamOrderBy) => void;
+  open: boolean; subjects: { id: string; name: string }[]; onCancel: () => void;
+  onStart: (subjectId: string, subjectName: string, orderBy: ExamOrderBy, includeArchived: boolean) => void;
 }) {
   const [subjectId, setSubjectId] = useState('');
   const [orderBy, setOrderBy] = useState<ExamOrderBy>('created');
+  const [includeArchived, setIncludeArchived] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setSubjectId(subjects[0]?.id || '');
     setOrderBy('created');
+    setIncludeArchived(false);
   }, [open, subjects]);
 
   const orderOptions: { id: ExamOrderBy; name: string }[] = [
@@ -680,7 +684,7 @@ function ExamSetupDialog({
   const handleStart = () => {
     const target = subjects.find(s => s.id === subjectId);
     if (!target) return;
-    onStart(subjectId, target.name, orderBy);
+    onStart(subjectId, target.name, orderBy, includeArchived);
   };
 
   return (
@@ -709,6 +713,17 @@ function ExamSetupDialog({
                 className={`exam-setup-chip ${orderBy === o.id ? 'active' : ''}`}
                 onClick={() => setOrderBy(o.id)}>{o.name}</button>
             ))}
+          </div>
+        </div>
+        <div className="exam-setup-section">
+          <div className="exam-setup-label">已归档的题</div>
+          <div className="exam-setup-chips">
+            <button type="button"
+              className={`exam-setup-chip ${!includeArchived ? 'active' : ''}`}
+              onClick={() => setIncludeArchived(false)}>不包含</button>
+            <button type="button"
+              className={`exam-setup-chip ${includeArchived ? 'active' : ''}`}
+              onClick={() => setIncludeArchived(true)}>一起过</button>
           </div>
         </div>
         <div className="exam-setup-actions">
@@ -866,6 +881,11 @@ function App() {
     return grouped;
   }, [taxonomies]);
 
+  const examSubjects = useMemo(
+    () => [{ id: ALL_SUBJECTS_ID, name: '全部' }, ...taxonomiesByType.subject],
+    [taxonomiesByType.subject]
+  );
+
   const liveMistakes = mistakes.filter((item) => !item.archived);
   const dueMistakes = liveMistakes
     .filter((item) => new Date(item.nextReviewAt).getTime() <= endOfToday().getTime())
@@ -913,8 +933,11 @@ function App() {
     setModeDialogOpen(true);
   };
 
-  const buildExamList = (subjectId: string, orderBy: ExamOrderBy): MistakeItem[] => {
-    const pool = liveMistakes.filter(m => m.subjectId === subjectId);
+  const buildExamList = (subjectId: string, orderBy: ExamOrderBy, includeArchived: boolean): MistakeItem[] => {
+    const source = includeArchived ? mistakes : liveMistakes;
+    const pool = subjectId === ALL_SUBJECTS_ID
+      ? [...source]
+      : source.filter(m => m.subjectId === subjectId);
     let list = [...pool];
     if (orderBy === 'created') list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     else if (orderBy === 'random') list = shuffleArray(list);
@@ -933,9 +956,20 @@ function App() {
     setActiveTab('review');
   };
 
-  const startExamReview = (subjectId: string, subjectName: string, orderBy: ExamOrderBy, progress: ReviewSessionProgress | null) => {
-    const ids = progress?.mistakeIds?.length ? progress.mistakeIds : buildExamList(subjectId, orderBy).map(m => m.id);
-    if (ids.length === 0) { setToast('这个科目还没错题'); return; }
+  const startExamReview = (
+    subjectId: string,
+    subjectName: string,
+    orderBy: ExamOrderBy,
+    includeArchived: boolean,
+    progress: ReviewSessionProgress | null
+  ) => {
+    const ids = progress?.mistakeIds?.length
+      ? progress.mistakeIds
+      : buildExamList(subjectId, orderBy, includeArchived).map(m => m.id);
+    if (ids.length === 0) {
+      setToast(subjectId === ALL_SUBJECTS_ID ? '还没有错题' : '这个科目还没错题');
+      return;
+    }
     setReviewSession({ kind: 'exam', subjectName, mistakeIds: ids, progress });
     setActiveTab('review');
   };
@@ -962,7 +996,7 @@ function App() {
     const session = loadSession(kind);
     if (!session) return;
     if (kind === 'normal') startNormalReview(session);
-    else startExamReview(session.subjectId ?? '', session.subjectName ?? '', session.orderBy ?? 'created', session);
+    else startExamReview(session.subjectId ?? ALL_SUBJECTS_ID, session.subjectName ?? '全部', session.orderBy ?? 'created', false, session);
   };
 
   const handleRestart = () => {
@@ -984,9 +1018,9 @@ function App() {
 
   const reviewMistakes = useMemo(() => {
     if (!reviewSession) return [];
-    const map = new Map(liveMistakes.map(m => [m.id, m]));
+    const map = new Map(mistakes.map(m => [m.id, m]));
     return reviewSession.mistakeIds.map(id => map.get(id)).filter(Boolean) as MistakeItem[];
-  }, [reviewSession, liveMistakes]);
+  }, [reviewSession, mistakes]);
 
   if (!settings) {
     return <div className="loading"><p>{bootError || '正在打开错题本'}</p></div>;
@@ -1155,11 +1189,11 @@ function App() {
         examHasSave={examHasSave}
         normalDueCount={dueMistakes.length} />
       <ExamSetupDialog open={examSetupOpen}
-        subjects={taxonomiesByType.subject}
+        subjects={examSubjects}
         onCancel={() => setExamSetupOpen(false)}
-        onStart={(subjectId, subjectName, orderBy) => {
+        onStart={(subjectId, subjectName, orderBy, includeArchived) => {
           setExamSetupOpen(false);
-          startExamReview(subjectId, subjectName, orderBy, null);
+          startExamReview(subjectId, subjectName, orderBy, includeArchived, null);
         }} />
       <ResumeDialog open={!!resumeKind}
         kind={resumeKind ?? 'normal'}
@@ -1579,7 +1613,6 @@ function GalleryView({
   onEdit: (mistake: MistakeItem) => void;
   onDelete: (mistake: MistakeItem) => Promise<void>;
 }) {
-  const [query, setQuery] = useState('');
   const [subjectId, setSubjectId] = useState('');
   const [causeId, setCauseId] = useState('');
   const [difficulty, setDifficulty] = useState('');
@@ -1595,15 +1628,11 @@ function GalleryView({
 
   const filtered = mistakes
     .filter((m) => showArchived ? m.archived : !m.archived)
-    .filter((mistake) => {
-      const text = `${mistake.title} ${mistake.note} ${mistake.answer} ${mistake.inspiration} ${mistake.sourceName}`.toLowerCase();
-      return (
-        (!query.trim() || text.includes(query.trim().toLowerCase())) &&
-        (!subjectId || mistake.subjectId === subjectId) &&
-        (!causeId || mistake.causeId === causeId) &&
-        (!difficulty || mistake.difficulty === difficulty)
-      );
-    });
+    .filter((mistake) => (
+      (!subjectId || mistake.subjectId === subjectId) &&
+      (!causeId || mistake.causeId === causeId) &&
+      (!difficulty || mistake.difficulty === difficulty)
+    ));
 
   const pendingTitle = pendingDelete ? (pendingDelete.title.trim() || '这道错题') : '这道错题';
 
@@ -1619,12 +1648,6 @@ function GalleryView({
             已归档{archivedCount > 0 ? ` · ${archivedCount}` : ''}
           </button>
         </div>
-      </div>
-
-      <div className="search-box">
-        <Search size={18} />
-        <input value={query} onChange={(event) => setQuery(event.target.value)}
-          placeholder="搜索标题、备注、题源、答案、启发" />
       </div>
 
       <div className="filter-groups">
@@ -1998,6 +2021,8 @@ function CalendarView({
   const selectedMistakes = mistakes.filter((mistake) => toDateKey(mistake.nextReviewAt) === selectedDate);
   const upcomingCount = upcomingDays.reduce((total, date) => total + (countByDay.get(toDateKey(date)) ?? 0), 0);
 
+  const selectedPillTransition = { type: 'spring' as const, stiffness: 420, damping: 32, mass: 0.75, restDelta: 0.001 };
+
   return (
     <section className="stack">
       <SectionHeading title="复习日历" meta={`未来35天 ${upcomingCount} 道`} />
@@ -2016,13 +2041,19 @@ function CalendarView({
           {days.map((date) => {
             const key = toDateKey(date);
             const count = countByDay.get(key) ?? 0;
+            const isSelected = key === selectedDate;
             const className = [
-              key === selectedDate ? 'selected' : '',
+              isSelected ? 'selected' : '',
               key === todayKey ? 'today' : '',
               count > 0 ? 'has-count' : ''
             ].filter(Boolean).join(' ');
             return (
               <button key={key} type="button" className={className} onClick={() => onSelectDate(key)}>
+                {isSelected && (
+                  <motion.span layoutId="calendar-selected-pill"
+                    className="calendar-selected-pill"
+                    transition={selectedPillTransition} />
+                )}
                 <span>{date.getDate()}</span>
                 <small>{count || ''}</small>
               </button>
@@ -2030,13 +2061,17 @@ function CalendarView({
           })}
         </div>
       </div>
-      <div className="stack">
+      <motion.div key={selectedDate}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
+        className="stack">
         {selectedMistakes.map((mistake) => (
           <MistakeCard key={mistake.id} mistake={mistake}
             images={imagesByMistake.get(mistake.id) ?? []} taxonomyMap={taxonomyMap} />
         ))}
         {selectedMistakes.length === 0 && <EmptyState icon={<CalendarDays />} title="这天没有安排" text="日历会随着复习自动变化。" />}
-      </div>
+      </motion.div>
     </section>
   );
 }
