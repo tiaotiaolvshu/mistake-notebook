@@ -26,7 +26,8 @@ type SettingsPanel = 'taxonomy' | 'review' | 'theme' | 'backup' | 'storage';
 
 type ThemeId =
   | 'xuanzhi' | 'qinghua' | 'moyu' | 'yanzhi' | 'zhuqing'
-  | 'zhusha' | 'yuebai' | 'cangcui' | 'qiuxiang' | 'jiangzi';
+  | 'wulan' | 'ganmeigui' | 'tailv' | 'shahe' | 'ouhe'
+  | 'shuilian' | 'richu' | 'caodian' | 'yuanwei' | 'musi';
 
 interface AnchorRect {
   left: number; top: number; right: number; bottom: number; width: number; height: number;
@@ -67,29 +68,39 @@ const taxonomyTitles: Record<TaxonomyType, string> = { subject: '科目', cause:
 const ALL_SUBJECTS_ID = '__all__';
 
 const THEMES: { id: ThemeId; name: string }[] = [
-  { id: 'xuanzhi',  name: '宣纸' },
-  { id: 'qinghua',  name: '青花' },
-  { id: 'moyu',     name: '墨玉' },
-  { id: 'yanzhi',   name: '胭脂' },
-  { id: 'zhuqing',  name: '竹青' },
-  { id: 'zhusha',   name: '朱砂' },
-  { id: 'yuebai',   name: '月白' },
-  { id: 'cangcui',  name: '苍翠' },
-  { id: 'qiuxiang', name: '秋香' },
-  { id: 'jiangzi',  name: '绛紫' },
+  { id: 'xuanzhi',   name: '宣纸' },
+  { id: 'qinghua',   name: '青花' },
+  { id: 'moyu',      name: '墨玉' },
+  { id: 'yanzhi',    name: '胭脂' },
+  { id: 'zhuqing',   name: '竹青' },
+  { id: 'wulan',     name: '雾蓝' },
+  { id: 'ganmeigui', name: '干玫瑰' },
+  { id: 'tailv',     name: '苔绿' },
+  { id: 'shahe',     name: '沙褐' },
+  { id: 'ouhe',      name: '藕荷' },
+  { id: 'shuilian',  name: '睡莲' },
+  { id: 'richu',     name: '日出' },
+  { id: 'caodian',   name: '草甸' },
+  { id: 'yuanwei',   name: '鸢尾' },
+  { id: 'musi',      name: '暮色' },
 ];
 
 const THEME_COLORS: Record<ThemeId, string> = {
-  xuanzhi:  '#f4efe4',
-  qinghua:  '#eef2f7',
-  moyu:     '#16161a',
-  yanzhi:   '#f6ece9',
-  zhuqing:  '#edf2ec',
-  zhusha:   '#f7e8e2',
-  yuebai:   '#eaf0f6',
-  cangcui:  '#0f1a18',
-  qiuxiang: '#f2f2da',
-  jiangzi:  '#efe6ed',
+  xuanzhi:   '#f4efe4',
+  qinghua:   '#eef2f7',
+  moyu:      '#16161a',
+  yanzhi:    '#f6ece9',
+  zhuqing:   '#edf2ec',
+  wulan:     '#e8ebee',
+  ganmeigui: '#f0e5e5',
+  tailv:     '#eaede4',
+  shahe:     '#eee6d9',
+  ouhe:      '#ece6ec',
+  shuilian:  '#e6eef5',
+  richu:     '#f8ead8',
+  caodian:   '#e8f0e0',
+  yuanwei:   '#ebe8f5',
+  musi:      '#1a1e2e',
 };
 
 const THEME_KEY = 'cuotiben.theme.v1';
@@ -270,35 +281,41 @@ const formatDurationShort = (sec: number): string => {
   return `${safe} 秒`;
 };
 
-// ===== 锚定弹窗 =====
+// ===== 锚定弹窗：默认 360；宽按钮跟按钮宽度 =====
 function AnchorDialog({
   open, anchorRect, onCancel, children
 }: { open: boolean; anchorRect: AnchorRect | null; onCancel: () => void; children: ReactNode }) {
-  const [pos, setPos] = useState<{ left: number; top: number; transform: string }>({
-    left: 0, top: 0, transform: 'translate(-50%, -50%)'
+  const [pos, setPos] = useState<{ left: number; top: number; transform: string; width: number }>({
+    left: 0, top: 0, transform: 'translate(-50%, -50%)', width: 360
   });
 
   useEffect(() => {
     if (!open) return;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const dialogWidth = Math.min(560, vw - 24);
     const margin = 12;
+    const maxAvailable = vw - 32;
+
+    // 默认 360；如果锚点是有意义的宽按钮（≥ 240），跟按钮宽度走（上限 400）
+    let dialogWidth = Math.min(360, maxAvailable);
+    if (anchorRect && anchorRect.width >= 240) {
+      dialogWidth = Math.min(Math.max(240, anchorRect.width), Math.min(400, maxAvailable));
+    }
 
     if (!anchorRect) {
-      setPos({ left: vw / 2, top: vh / 2, transform: 'translate(-50%, -50%)' });
+      setPos({ left: vw / 2, top: vh / 2, transform: 'translate(-50%, -50%)', width: dialogWidth });
       return;
     }
 
     let left = anchorRect.left + anchorRect.width / 2;
     const halfW = dialogWidth / 2;
-    left = Math.max(halfW + 12, Math.min(vw - halfW - 12, left));
+    left = Math.max(halfW + 16, Math.min(vw - halfW - 16, left));
     const spaceAbove = anchorRect.top;
     const spaceBelow = vh - anchorRect.bottom;
     const preferAbove = spaceAbove >= spaceBelow;
     const top = preferAbove ? anchorRect.top - margin : anchorRect.bottom + margin;
     const transform = preferAbove ? 'translate(-50%, -100%)' : 'translate(-50%, 0)';
-    setPos({ left, top, transform });
+    setPos({ left, top, transform, width: dialogWidth });
   }, [open, anchorRect]);
 
   const dialog = (
@@ -310,7 +327,7 @@ function AnchorDialog({
           <div className="anchor-dialog"
             style={{
               position: 'fixed', left: pos.left, top: pos.top, transform: pos.transform,
-              width: 'min(560px, calc(100vw - 24px))'
+              width: `${pos.width}px`, maxWidth: 'calc(100vw - 32px)'
             }}
             onClick={(e) => e.stopPropagation()}>
             <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }} transition={{ duration: 0.15 }}>
@@ -595,8 +612,6 @@ function SessionTimer({
 
   const firedRef = useRef(false);
 
-  // 关键修复：正计时无条件累加，无论 up/down 模式。
-  // 倒计时只是额外减数，不影响正计时累计。
   useEffect(() => {
     if (!running) return;
     const timer = window.setInterval(() => {
@@ -2279,7 +2294,7 @@ function ImportView({
             <div className="import-page-inner">
               <div className="import-left-col">
                 <SectionHeading title={`第 ${index + 1} 题`} meta={`${item.questionImages.length + item.answerImages.length} 张图片`} />
-                <div className="form-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div className="form-grid form-grid-pair">
                   <SegmentedControl label="科目" columns={3}
                     options={taxonomiesByType.subject.map(opt => ({ id: opt.id, name: opt.name }))}
                     value={item.draft.subjectId}
@@ -2642,7 +2657,7 @@ function EditView({
 
         <div className="import-page-inner">
           <div className="import-left-col">
-            <div className="form-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+            <div className="form-grid form-grid-pair">
               <SegmentedControl label="科目" columns={3}
                 options={taxonomiesByType.subject.map(opt => ({ id: opt.id, name: opt.name }))}
                 value={draft.subjectId}
