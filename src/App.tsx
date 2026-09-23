@@ -3,7 +3,7 @@ import type { ComponentProps, Dispatch, ReactNode, SetStateAction } from 'react'
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import {
-  Archive, BookOpen, CalendarDays, Camera, Check, ChevronDown, Database, Download,
+  Archive, BarChart3, BookOpen, Camera, Check, ChevronDown, Database, Download,
   GraduationCap, ImagePlus, Images, MoreHorizontal, Palette, Pencil, Plus, RotateCcw,
   Settings, SlidersHorizontal, Tags, Trash2, X,
 } from 'lucide-react';
@@ -21,21 +21,15 @@ import type {
   TaxonomyOption, TaxonomyType
 } from './types';
 
-type TabKey = 'today' | 'import' | 'gallery' | 'calendar' | 'settings' | 'review' | 'edit';
+type TabKey = 'today' | 'import' | 'gallery' | 'stats' | 'settings' | 'review' | 'edit';
 type SettingsPanel = 'taxonomy' | 'review' | 'theme' | 'backup' | 'storage';
 
 type ThemeId =
   | 'xuanzhi' | 'qinghua' | 'moyu' | 'yanzhi' | 'zhuqing'
-  | 'zheshi' | 'dailan' | 'chahe' | 'tenghuang' | 'zitan';
+  | 'zhusha' | 'yuebai' | 'cangcui' | 'qiuxiang' | 'jiangzi';
 
-/** 通用锚点矩形：不用 DOMRect，兼容所有 WebView */
 interface AnchorRect {
-  left: number;
-  top: number;
-  right: number;
-  bottom: number;
-  width: number;
-  height: number;
+  left: number; top: number; right: number; bottom: number; width: number; height: number;
 }
 
 interface PendingImage { id: string; file: File; url: string; }
@@ -59,38 +53,48 @@ interface LastSessionSummary {
   endedAt: string;
 }
 
-const taxonomyTitles: Record<TaxonomyType, string> = { subject: '科目', cause: '错因', source: '题源快捷项' };
+interface AccumulatedStats {
+  sessionCount: number;
+  totalReviewed: number;
+  totalElapsedSec: number;
+  totalForgot: number;
+  totalStruggled: number;
+  totalRemembered: number;
+  totalMastered: number;
+}
 
+const taxonomyTitles: Record<TaxonomyType, string> = { subject: '科目', cause: '错因', source: '题源快捷项' };
 const ALL_SUBJECTS_ID = '__all__';
 
 const THEMES: { id: ThemeId; name: string }[] = [
-  { id: 'xuanzhi',   name: '宣纸' },
-  { id: 'qinghua',   name: '青花' },
-  { id: 'moyu',      name: '墨玉' },
-  { id: 'yanzhi',    name: '胭脂' },
-  { id: 'zhuqing',   name: '竹青' },
-  { id: 'zheshi',    name: '赭石' },
-  { id: 'dailan',    name: '黛蓝' },
-  { id: 'chahe',     name: '茶褐' },
-  { id: 'tenghuang', name: '藤黄' },
-  { id: 'zitan',     name: '紫檀' },
+  { id: 'xuanzhi',  name: '宣纸' },
+  { id: 'qinghua',  name: '青花' },
+  { id: 'moyu',     name: '墨玉' },
+  { id: 'yanzhi',   name: '胭脂' },
+  { id: 'zhuqing',  name: '竹青' },
+  { id: 'zhusha',   name: '朱砂' },
+  { id: 'yuebai',   name: '月白' },
+  { id: 'cangcui',  name: '苍翠' },
+  { id: 'qiuxiang', name: '秋香' },
+  { id: 'jiangzi',  name: '绛紫' },
 ];
 
 const THEME_COLORS: Record<ThemeId, string> = {
-  xuanzhi:   '#f4efe4',
-  qinghua:   '#eef2f7',
-  moyu:      '#16161a',
-  yanzhi:    '#f6ece9',
-  zhuqing:   '#edf2ec',
-  zheshi:    '#f0e6db',
-  dailan:    '#ecf0f4',
-  chahe:     '#f2ece0',
-  tenghuang: '#f7f0dc',
-  zitan:     '#17121a',
+  xuanzhi:  '#f4efe4',
+  qinghua:  '#eef2f7',
+  moyu:     '#16161a',
+  yanzhi:   '#f6ece9',
+  zhuqing:  '#edf2ec',
+  zhusha:   '#f7e8e2',
+  yuebai:   '#eaf0f6',
+  cangcui:  '#0f1a18',
+  qiuxiang: '#f2f2da',
+  jiangzi:  '#efe6ed',
 };
 
 const THEME_KEY = 'cuotiben.theme.v1';
 const LAST_SESSION_KEY = 'cuotiben.lastSession.v1';
+const ACCUMULATED_KEY = 'cuotiben.stats.v1';
 
 const emptyDraft: MistakeDraft = {
   title: '', note: '', answer: '', inspiration: '',
@@ -101,8 +105,7 @@ const newItemKey = () => `item-${crypto.randomUUID()}`;
 const createEmptyItem = (defaults?: Partial<MistakeDraft>): ImportItem => ({
   itemKey: newItemKey(),
   draft: { ...emptyDraft, ...defaults },
-  questionImages: [],
-  answerImages: []
+  questionImages: [], answerImages: []
 });
 
 const springSoft = { duration: 0.08, ease: 'easeOut' } as const;
@@ -117,15 +120,15 @@ const NORMAL_SESSION_KEY = 'cuotiben.reviewSession.normal.v1';
 const EXAM_SESSION_KEY = 'cuotiben.reviewSession.exam.v1';
 const PAGE_SIZE = 15;
 
-/** 把 DOMRect（getBoundingClientRect 的返回值）转成普通对象 */
 const toAnchorRect = (rect: DOMRect): AnchorRect => ({
-  left: rect.left,
-  top: rect.top,
-  right: rect.right,
-  bottom: rect.bottom,
-  width: rect.width,
-  height: rect.height,
+  left: rect.left, top: rect.top, right: rect.right,
+  bottom: rect.bottom, width: rect.width, height: rect.height,
 });
+
+const emptyAccumulated: AccumulatedStats = {
+  sessionCount: 0, totalReviewed: 0, totalElapsedSec: 0,
+  totalForgot: 0, totalStruggled: 0, totalRemembered: 0, totalMastered: 0,
+};
 
 const releasePendingImages = (list: PendingImage[]) => {
   list.forEach((image) => URL.revokeObjectURL(image.url));
@@ -167,6 +170,19 @@ const loadLastSession = (): LastSessionSummary | null => {
 
 const saveLastSession = (summary: LastSessionSummary) => {
   try { window.localStorage.setItem(LAST_SESSION_KEY, JSON.stringify(summary)); } catch {}
+};
+
+const loadAccumulated = (): AccumulatedStats => {
+  try {
+    const raw = window.localStorage.getItem(ACCUMULATED_KEY);
+    if (!raw) return { ...emptyAccumulated };
+    const parsed = JSON.parse(raw) as AccumulatedStats;
+    return { ...emptyAccumulated, ...parsed };
+  } catch { return { ...emptyAccumulated }; }
+};
+
+const saveAccumulated = (stats: AccumulatedStats) => {
+  try { window.localStorage.setItem(ACCUMULATED_KEY, JSON.stringify(stats)); } catch {}
 };
 
 const loadImportItems = (): ImportItem[] => {
@@ -245,7 +261,16 @@ const formatDuration = (sec: number): string => {
   return `${s} 秒`;
 };
 
-// ===== 锚定弹窗（跟手点击位置） =====
+const formatDurationShort = (sec: number): string => {
+  const safe = Math.max(0, Math.floor(sec));
+  const h = Math.floor(safe / 3600);
+  const m = Math.floor((safe % 3600) / 60);
+  if (h > 0) return `${h} 时 ${m} 分`;
+  if (m > 0) return `${m} 分`;
+  return `${safe} 秒`;
+};
+
+// ===== 锚定弹窗 =====
 function AnchorDialog({
   open, anchorRect, onCancel, children
 }: { open: boolean; anchorRect: AnchorRect | null; onCancel: () => void; children: ReactNode }) {
@@ -257,17 +282,17 @@ function AnchorDialog({
     if (!open) return;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const dialogWidth = Math.min(360, vw - 32);
+    const dialogWidth = Math.min(560, vw - 24);
     const margin = 12;
 
-    // 理论上不会走到这里；万一 anchorRect 为 null（极端异常），也只是临时的视觉兜底
     if (!anchorRect) {
       setPos({ left: vw / 2, top: vh / 2, transform: 'translate(-50%, -50%)' });
       return;
     }
 
     let left = anchorRect.left + anchorRect.width / 2;
-    left = Math.max(dialogWidth / 2 + 16, Math.min(vw - dialogWidth / 2 - 16, left));
+    const halfW = dialogWidth / 2;
+    left = Math.max(halfW + 12, Math.min(vw - halfW - 12, left));
     const spaceAbove = anchorRect.top;
     const spaceBelow = vh - anchorRect.bottom;
     const preferAbove = spaceAbove >= spaceBelow;
@@ -285,7 +310,7 @@ function AnchorDialog({
           <div className="anchor-dialog"
             style={{
               position: 'fixed', left: pos.left, top: pos.top, transform: pos.transform,
-              width: 'min(360px, calc(100vw - 32px))'
+              width: 'min(560px, calc(100vw - 24px))'
             }}
             onClick={(e) => e.stopPropagation()}>
             <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }} transition={{ duration: 0.15 }}>
@@ -299,7 +324,7 @@ function AnchorDialog({
   return createPortal(dialog, document.body);
 }
 
-// ===== 居中弹窗（仅用于选项多、不适合锚定的场景） =====
+// ===== 居中弹窗 =====
 function CenterDialog({
   open, onCancel, children
 }: { open: boolean; onCancel: () => void; children: ReactNode }) {
@@ -344,17 +369,13 @@ function SegmentedControl<T extends string>({
 
   const layout = useMemo(() => {
     const result: { row: number; col: number; span: number }[] = [];
-    let row = 0;
-    let col = 0;
+    let row = 0; let col = 0;
     options.forEach((_, i) => {
       const isLast = i === total - 1;
       const span = isLast && remainder !== 0 ? Math.max(1, columns - col) : 1;
       result.push({ row, col, span });
       col += span;
-      if (col >= columns) {
-        row += 1;
-        col = 0;
-      }
+      if (col >= columns) { row += 1; col = 0; }
     });
     return result;
   }, [options, columns, total, remainder]);
@@ -384,10 +405,7 @@ function SegmentedControl<T extends string>({
     <div className="field" style={{ gap: '4px' }}>
       {label && <span>{label}</span>}
       <div ref={containerRef} className="segmented-wrap"
-        style={{
-          gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
-          ['--cols' as string]: columns,
-        }}>
+        style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, ['--cols' as string]: columns }}>
         {isReady && (
           <motion.div layoutId={id.current}
             transition={{ type: 'spring', stiffness: 500, damping: 30 }}
@@ -399,9 +417,7 @@ function SegmentedControl<T extends string>({
           const spanMulti = item.span > 1;
           return (
             <button key={opt.id}
-              data-row={item.row}
-              data-col={item.col}
-              data-span={item.span}
+              data-row={item.row} data-col={item.col} data-span={item.span}
               className={`segmented-option ${value === opt.id ? 'selected' : ''} ${spanMulti ? 'span-multi' : ''}`}
               onClick={() => onChange(opt.id)}
               style={spanMulti ? {
@@ -496,7 +512,7 @@ function ImageLightbox({ image, onClose }: { image: { src: string; title: string
   return createPortal(node, document.body);
 }
 
-// ===== 计时器时长选择弹窗（锚定在倒计时按钮上） =====
+// ===== 计时器时长选择弹窗 =====
 function TimerPickDialog({
   open, anchorRect, onCancel, onPick
 }: {
@@ -539,12 +555,8 @@ function TimerPickDialog({
           ) : (
             <>
               <input
-                type="number"
-                inputMode="numeric"
-                min={1}
-                max={600}
-                className="timer-pick-input"
-                value={customValue}
+                type="number" inputMode="numeric" min={1} max={600}
+                className="timer-pick-input" value={customValue}
                 onChange={(e) => setCustomValue(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') handleCustomConfirm(); }}
                 autoFocus
@@ -562,11 +574,7 @@ function TimerPickDialog({
 
 // ===== 计时器 =====
 function SessionTimer({
-  kind,
-  running,
-  elapsedSec,
-  onTick,
-  onTimeUp,
+  kind, running, elapsedSec, onTick, onTimeUp,
 }: {
   kind: ReviewSessionKind;
   running: boolean;
@@ -587,14 +595,15 @@ function SessionTimer({
 
   const firedRef = useRef(false);
 
+  // 关键修复：正计时无条件累加，无论 up/down 模式。
+  // 倒计时只是额外减数，不影响正计时累计。
   useEffect(() => {
     if (!running) return;
     const timer = window.setInterval(() => {
-      if (mode === 'up' || !isExam) {
-        const next = elapsedRef.current + 1;
-        elapsedRef.current = next;
-        onTick(next);
-      }
+      const next = elapsedRef.current + 1;
+      elapsedRef.current = next;
+      onTick(next);
+
       if (isExam && mode === 'down') {
         setCountdownSec((prev) => {
           if (prev <= 1) {
@@ -637,9 +646,7 @@ function SessionTimer({
   return (
     <div className="session-timer">
       <div className="session-timer-main">
-        <span className="session-timer-label">
-          {mode === 'down' ? '倒计时' : '已用时'}
-        </span>
+        <span className="session-timer-label">{mode === 'down' ? '倒计时' : '已用时'}</span>
         <span className={`session-timer-value ${mode === 'down' && countdownSec <= 60 ? 'urgent' : ''}`}>
           {formatTime(displaySec)}
         </span>
@@ -651,15 +658,12 @@ function SessionTimer({
       </div>
       {isExam && (
         <div className="session-timer-modes">
-          <button
-            type="button"
+          <button type="button"
             className={`session-timer-mode-btn ${mode === 'up' ? 'active' : ''}`}
             onClick={handleUpClick}>
             正计时
           </button>
-          <button
-            ref={downBtnRef}
-            type="button"
+          <button ref={downBtnRef} type="button"
             className={`session-timer-mode-btn ${mode === 'down' ? 'active' : ''}`}
             onClick={openPick}>
             倒计时
@@ -678,13 +682,7 @@ function SessionTimer({
 
 // ===== 会话总结 =====
 function SessionSummary({
-  kind,
-  subjectName,
-  totalCount,
-  answeredCount,
-  stats,
-  elapsedSec,
-  onClose,
+  kind, subjectName, totalCount, answeredCount, stats, elapsedSec, onClose,
 }: {
   kind: ReviewSessionKind;
   subjectName?: string;
@@ -720,7 +718,6 @@ function SessionSummary({
             </div>
             <h2 className="summary-title">本次完成</h2>
           </div>
-
           <div className="summary-topline">
             <div className="summary-big">
               <span className="summary-big-num">{answeredCount}</span>
@@ -737,25 +734,18 @@ function SessionSummary({
               </div>
             </div>
           </div>
-
           <div className="summary-bars">
             {sorted.map((s) => (
               <div className="summary-bar-row" key={s.key}>
                 <span className={`summary-bar-label summary-bar-${s.cls}`}>{s.label}</span>
                 <div className="summary-bar-track">
-                  <div
-                    className={`summary-bar-fill summary-bar-fill-${s.cls}`}
-                    style={{ width: `${(s.value / maxValue) * 100}%` }}
-                  />
+                  <div className={`summary-bar-fill summary-bar-fill-${s.cls}`} style={{ width: `${(s.value / maxValue) * 100}%` }} />
                 </div>
                 <span className="summary-bar-value">{s.value}</span>
               </div>
             ))}
           </div>
-
-          <button type="button" className="primary-action summary-close" onClick={onClose}>
-            完成
-          </button>
+          <button type="button" className="primary-action summary-close" onClick={onClose}>完成</button>
         </motion.div>
       </motion.div>
     </AnimatePresence>,
@@ -869,16 +859,11 @@ function ReviewFullscreen({
     let answered = 0;
     mistakes.forEach((m) => {
       const r = finalAnswered[m.id];
-      if (r) {
-        stats[r] += 1;
-        answered += 1;
-      } else {
-        stats.forgot += 1;
-      }
+      if (r) { stats[r] += 1; answered += 1; }
+      else { stats.forgot += 1; }
     });
     return {
-      kind,
-      subjectName,
+      kind, subjectName,
       totalCount: mistakes.length,
       answeredCount: answered,
       forgot: stats.forgot,
@@ -913,9 +898,7 @@ function ReviewFullscreen({
     const allAnswered = mistakes.every(m => nextAnswered[m.id]);
     if (allAnswered) {
       onClearSession(kind);
-      window.setTimeout(() => {
-        finishWithSummary(nextAnswered);
-      }, 220);
+      window.setTimeout(() => { finishWithSummary(nextAnswered); }, 220);
       return;
     }
     if (isFirstAnswer && safeIndex + 1 < total) {
@@ -1061,11 +1044,8 @@ function ReviewFullscreen({
         <div className="review-right-body">
           <h3 className="review-right-title">题号</h3>
           <div className="review-page-numbers-wrap">
-            <motion.div
-              className="review-page-numbers"
-              drag="x"
-              dragConstraints={{ left: 0, right: 0 }}
-              dragElastic={0.15}
+            <motion.div className="review-page-numbers"
+              drag="x" dragConstraints={{ left: 0, right: 0 }} dragElastic={0.15}
               onDragEnd={(_, info) => {
                 if (info.offset.x < -60 || info.velocity.x < -400) goToPage(page + 1);
                 else if (info.offset.x > 60 || info.velocity.x > 400) goToPage(page - 1);
@@ -1226,20 +1206,12 @@ function ExamSetupDialog({
     onStart(subjectId, target.name, orderBy, includeArchived);
   };
 
-  const renderChip = (
-    key: string,
-    layoutId: string,
-    active: boolean,
-    label: string,
-    onClick: () => void
-  ) => (
+  const renderChip = (key: string, layoutId: string, active: boolean, label: string, onClick: () => void) => (
     <button key={key} type="button"
       className={`exam-setup-chip ${active ? 'active' : ''}`}
       onClick={onClick}>
       {active && (
-        <motion.span layoutId={layoutId}
-          className="exam-setup-pill"
-          transition={pillTransition} />
+        <motion.span layoutId={layoutId} className="exam-setup-pill" transition={pillTransition} />
       )}
       <span className="exam-setup-chip-label">{label}</span>
     </button>
@@ -1255,26 +1227,14 @@ function ExamSetupDialog({
             <div className="exam-setup-empty">还没有科目，去设置里添加</div>
           ) : (
             <div className="exam-setup-chips">
-              {subjects.map((s) => renderChip(
-                s.id,
-                'exam-subject-pill',
-                subjectId === s.id,
-                s.name,
-                () => setSubjectId(s.id)
-              ))}
+              {subjects.map((s) => renderChip(s.id, 'exam-subject-pill', subjectId === s.id, s.name, () => setSubjectId(s.id)))}
             </div>
           )}
         </div>
         <div className="exam-setup-section">
           <div className="exam-setup-label">题目顺序</div>
           <div className="exam-setup-chips">
-            {orderOptions.map((o) => renderChip(
-              o.id,
-              'exam-order-pill',
-              orderBy === o.id,
-              o.name,
-              () => setOrderBy(o.id)
-            ))}
+            {orderOptions.map((o) => renderChip(o.id, 'exam-order-pill', orderBy === o.id, o.name, () => setOrderBy(o.id)))}
           </div>
         </div>
         <div className="exam-setup-section">
@@ -1317,6 +1277,221 @@ function ResumeDialog({
   );
 }
 
+// ===== 统计页 =====
+function StatsView({
+  allMistakes, liveMistakes, dueMistakes, taxonomiesByType, lastSession, accumulated,
+}: {
+  allMistakes: MistakeItem[];
+  liveMistakes: MistakeItem[];
+  dueMistakes: MistakeItem[];
+  taxonomiesByType: Record<TaxonomyType, TaxonomyOption[]>;
+  lastSession: LastSessionSummary | null;
+  accumulated: AccumulatedStats;
+}) {
+  const totalAll = allMistakes.length;
+  const totalArchived = allMistakes.filter(m => m.archived).length;
+  const totalLive = liveMistakes.length;
+
+  const buckets = { fresh: 0, learning: 0, familiar: 0, mastered: 0 };
+  liveMistakes.forEach((m) => {
+    const s = m.reviewStage ?? 0;
+    if (s <= 1) buckets.fresh += 1;
+    else if (s <= 3) buckets.learning += 1;
+    else if (s <= 5) buckets.familiar += 1;
+    else buckets.mastered += 1;
+  });
+  const masteryRate = totalLive > 0 ? Math.round(((buckets.familiar + buckets.mastered) / totalLive) * 100) : 0;
+
+  const subjectStats = taxonomiesByType.subject.map((s) => ({
+    id: s.id, name: s.name,
+    count: liveMistakes.filter(m => m.subjectId === s.id).length,
+  })).sort((a, b) => b.count - a.count);
+  const maxSubject = Math.max(1, ...subjectStats.map(s => s.count));
+
+  const causeStats = taxonomiesByType.cause.map((c) => ({
+    id: c.id, name: c.name,
+    count: liveMistakes.filter(m => m.causeId === c.id).length,
+  })).sort((a, b) => b.count - a.count);
+  const maxCause = Math.max(1, ...causeStats.map(c => c.count));
+
+  const difficultyBuckets = (['hard', 'medium', 'easy'] as Difficulty[]).map((d) => ({
+    id: d, name: difficultyLabel[d],
+    count: liveMistakes.filter(m => m.difficulty === d).length,
+  }));
+
+  const acc = accumulated;
+  const avgPerSession = acc.sessionCount > 0 ? Math.round(acc.totalReviewed / acc.sessionCount) : 0;
+  const avgPerQuestionSec = acc.totalReviewed > 0 ? Math.round(acc.totalElapsedSec / acc.totalReviewed) : 0;
+
+  return (
+    <section className="stack">
+      <SectionHeading title="学习统计" meta="累计" />
+
+      <div className="stats-hero">
+        <div className="stats-hero-cell">
+          <div className="stats-hero-num">{totalAll}</div>
+          <div className="stats-hero-label">总录入</div>
+        </div>
+        <div className="stats-hero-cell">
+          <div className="stats-hero-num">{totalLive}</div>
+          <div className="stats-hero-label">在库</div>
+        </div>
+        <div className="stats-hero-cell">
+          <div className="stats-hero-num">{dueMistakes.length}</div>
+          <div className="stats-hero-label">待复习</div>
+        </div>
+        <div className="stats-hero-cell">
+          <div className="stats-hero-num">{masteryRate}<span className="stats-hero-unit">%</span></div>
+          <div className="stats-hero-label">掌握率</div>
+        </div>
+      </div>
+
+      <div className="stats-card">
+        <div className="stats-card-head">
+          <h3>记忆程度分布</h3>
+          <span>{totalLive} 道</span>
+        </div>
+        <div className="stats-bars">
+          <StatBar label="生疏" value={buckets.fresh} total={totalLive} cls="fresh" />
+          <StatBar label="学习中" value={buckets.learning} total={totalLive} cls="learning" />
+          <StatBar label="较熟" value={buckets.familiar} total={totalLive} cls="familiar" />
+          <StatBar label="已掌握" value={buckets.mastered} total={totalLive} cls="mastered" />
+        </div>
+      </div>
+
+      <div className="stats-card">
+        <div className="stats-card-head"><h3>难度分布</h3></div>
+        <div className="stats-bars">
+          {difficultyBuckets.map((d) => (
+            <StatBar key={d.id} label={d.name} value={d.count} total={totalLive}
+              cls={d.id === 'hard' ? 'fresh' : d.id === 'medium' ? 'learning' : 'mastered'} />
+          ))}
+        </div>
+      </div>
+
+      {subjectStats.length > 0 && (
+        <div className="stats-card">
+          <div className="stats-card-head"><h3>科目分布</h3><span>在库</span></div>
+          <div className="stats-list">
+            {subjectStats.map((s) => (
+              <div className="stats-list-row" key={s.id}>
+                <span className="stats-list-name">{s.name}</span>
+                <div className="stats-list-track">
+                  <div className="stats-list-fill fill-primary" style={{ width: `${(s.count / maxSubject) * 100}%` }} />
+                </div>
+                <span className="stats-list-value">{s.count}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {causeStats.length > 0 && (
+        <div className="stats-card">
+          <div className="stats-card-head"><h3>错因分布</h3><span>在库</span></div>
+          <div className="stats-list">
+            {causeStats.map((c) => (
+              <div className="stats-list-row" key={c.id}>
+                <span className="stats-list-name">{c.name}</span>
+                <div className="stats-list-track">
+                  <div className="stats-list-fill fill-warning" style={{ width: `${(c.count / maxCause) * 100}%` }} />
+                </div>
+                <span className="stats-list-value">{c.count}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="stats-card">
+        <div className="stats-card-head">
+          <h3>累计学习</h3>
+          <span>{acc.sessionCount} 次会话</span>
+        </div>
+        <div className="stats-grid-4">
+          <div className="stats-mini">
+            <div className="stats-mini-num">{acc.totalReviewed}</div>
+            <div className="stats-mini-label">累计复习</div>
+          </div>
+          <div className="stats-mini">
+            <div className="stats-mini-num">{formatDurationShort(acc.totalElapsedSec)}</div>
+            <div className="stats-mini-label">累计用时</div>
+          </div>
+          <div className="stats-mini">
+            <div className="stats-mini-num">{avgPerSession}</div>
+            <div className="stats-mini-label">次均题数</div>
+          </div>
+          <div className="stats-mini">
+            <div className="stats-mini-num">{avgPerQuestionSec}<span className="stats-mini-unit">秒</span></div>
+            <div className="stats-mini-label">均题用时</div>
+          </div>
+        </div>
+        {acc.totalReviewed > 0 && (
+          <div className="stats-bars" style={{ marginTop: 14 }}>
+            <StatBar label="不会" value={acc.totalForgot} total={acc.totalReviewed} cls="forgot" />
+            <StatBar label="有点难" value={acc.totalStruggled} total={acc.totalReviewed} cls="learning" />
+            <StatBar label="记得" value={acc.totalRemembered} total={acc.totalReviewed} cls="familiar" />
+            <StatBar label="很熟" value={acc.totalMastered} total={acc.totalReviewed} cls="mastered" />
+          </div>
+        )}
+      </div>
+
+      {lastSession && (
+        <div className="stats-card">
+          <div className="stats-card-head">
+            <h3>最近一次</h3>
+            <span>{formatShortDate(lastSession.endedAt)}</span>
+          </div>
+          <div className="stats-grid-4">
+            <div className="stats-mini">
+              <div className="stats-mini-num">{lastSession.answeredCount}<span className="stats-mini-unit">/{lastSession.totalCount}</span></div>
+              <div className="stats-mini-label">已答</div>
+            </div>
+            <div className="stats-mini">
+              <div className="stats-mini-num">{formatDurationShort(lastSession.elapsedSec)}</div>
+              <div className="stats-mini-label">用时</div>
+            </div>
+            <div className="stats-mini">
+              <div className="stats-mini-num">
+                {lastSession.answeredCount > 0 ? Math.round(lastSession.elapsedSec / lastSession.answeredCount) : 0}
+                <span className="stats-mini-unit">秒</span>
+              </div>
+              <div className="stats-mini-label">均题用时</div>
+            </div>
+            <div className="stats-mini">
+              <div className="stats-mini-num">{lastSession.kind === 'exam' ? '备考' : '日常'}</div>
+              <div className="stats-mini-label">模式</div>
+            </div>
+          </div>
+          <div className="stats-bars" style={{ marginTop: 14 }}>
+            <StatBar label="很熟" value={lastSession.mastered} total={lastSession.totalCount} cls="mastered" />
+            <StatBar label="记得" value={lastSession.remembered} total={lastSession.totalCount} cls="familiar" />
+            <StatBar label="有点难" value={lastSession.struggled} total={lastSession.totalCount} cls="learning" />
+            <StatBar label="不会" value={lastSession.forgot} total={lastSession.totalCount} cls="forgot" />
+          </div>
+        </div>
+      )}
+
+      {totalAll === 0 && (
+        <EmptyState icon={<BarChart3 />} title="还没有数据" text="开始录入错题后，这里会显示统计。" />
+      )}
+    </section>
+  );
+}
+
+function StatBar({ label, value, total, cls }: { label: string; value: number; total: number; cls: string }) {
+  const pct = total > 0 ? (value / total) * 100 : 0;
+  return (
+    <div className="stats-bar-row">
+      <span className={`stats-bar-label stats-bar-label-${cls}`}>{label}</span>
+      <div className="stats-bar-track">
+        <div className={`stats-bar-fill stats-bar-fill-${cls}`} style={{ width: `${pct}%` }} />
+      </div>
+      <span className="stats-bar-value">{value}</span>
+    </div>
+  );
+}
+
 // ===== App 主函数 =====
 function App() {
   const reducedMotion = useReducedMotion();
@@ -1325,7 +1500,6 @@ function App() {
   const [images, setImages] = useState<ImageAsset[]>([]);
   const [taxonomies, setTaxonomies] = useState<TaxonomyOption[]>([]);
   const [settings, setSettings] = useState<AppSettings | null>(null);
-  const [selectedDate, setSelectedDate] = useState(toDateKey(new Date()));
   const [toast, setToast] = useState('');
   const [bootError, setBootError] = useState('');
   const [importItems, setImportItems] = useState<ImportItem[]>(() => loadImportItems());
@@ -1342,6 +1516,7 @@ function App() {
   const [examHasSave, setExamHasSave] = useState(false);
   const [theme, setTheme] = useState<ThemeId>(() => loadTheme());
   const [lastSession, setLastSession] = useState<LastSessionSummary | null>(() => loadLastSession());
+  const [accumulated, setAccumulated] = useState<AccumulatedStats>(() => loadAccumulated());
   const importItemsRef = useRef<ImportItem[]>([]);
   const draftImagesLoadedRef = useRef(false);
   const galleryScrollRef = useRef<number>(0);
@@ -1505,9 +1680,7 @@ function App() {
 
   const buildExamList = (subjectId: string, orderBy: ExamOrderBy, includeArchived: boolean): MistakeItem[] => {
     const source = includeArchived ? mistakes : liveMistakes;
-    const pool = subjectId === ALL_SUBJECTS_ID
-      ? [...source]
-      : source.filter(m => m.subjectId === subjectId);
+    const pool = subjectId === ALL_SUBJECTS_ID ? [...source] : source.filter(m => m.subjectId === subjectId);
     let list = [...pool];
     if (orderBy === 'created') list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     else if (orderBy === 'random') list = shuffleArray(list);
@@ -1527,11 +1700,8 @@ function App() {
   };
 
   const startExamReview = (
-    subjectId: string,
-    subjectName: string,
-    orderBy: ExamOrderBy,
-    includeArchived: boolean,
-    progress: ReviewSessionProgress | null
+    subjectId: string, subjectName: string, orderBy: ExamOrderBy,
+    includeArchived: boolean, progress: ReviewSessionProgress | null
   ) => {
     const ids = progress?.mistakeIds?.length
       ? progress.mistakeIds
@@ -1583,6 +1753,17 @@ function App() {
   const handleSessionComplete = (summary: LastSessionSummary) => {
     saveLastSession(summary);
     setLastSession(summary);
+    const next: AccumulatedStats = {
+      sessionCount: accumulated.sessionCount + 1,
+      totalReviewed: accumulated.totalReviewed + summary.answeredCount,
+      totalElapsedSec: accumulated.totalElapsedSec + summary.elapsedSec,
+      totalForgot: accumulated.totalForgot + summary.forgot,
+      totalStruggled: accumulated.totalStruggled + summary.struggled,
+      totalRemembered: accumulated.totalRemembered + summary.remembered,
+      totalMastered: accumulated.totalMastered + summary.mastered,
+    };
+    saveAccumulated(next);
+    setAccumulated(next);
   };
 
   const handleExitReview = async () => {
@@ -1606,10 +1787,7 @@ function App() {
       return (
         <div className="app-shell">
           <header className="topbar">
-            <div>
-              <p className="eyebrow">复习</p>
-              <h1>错题本</h1>
-            </div>
+            <div><p className="eyebrow">复习</p><h1>错题本</h1></div>
           </header>
           <div className="loading" style={{ minHeight: '60vh' }}><p>没有可复习的题目</p></div>
           <div style={{ textAlign: 'center' }}>
@@ -1681,8 +1859,7 @@ function App() {
         <AnimatePresence mode="wait">
           <motion.div key={activeTab}
             initial={reducedMotion ? { opacity: 1 } : { opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             transition={reducedMotion ? { duration: 0 } : fadeSlide}>
             {activeTab === 'today' && (
               <TodayView
@@ -1714,15 +1891,14 @@ function App() {
                 onDelete={handleDelete}
               />
             )}
-            {activeTab === 'calendar' && (
-              <CalendarView
-                mistakes={liveMistakes}
+            {activeTab === 'stats' && (
+              <StatsView
                 allMistakes={mistakes}
+                liveMistakes={liveMistakes}
+                dueMistakes={dueMistakes}
+                taxonomiesByType={taxonomiesByType}
                 lastSession={lastSession}
-                imagesByMistake={imagesByMistake}
-                taxonomyMap={taxonomyMap}
-                selectedDate={selectedDate}
-                onSelectDate={setSelectedDate}
+                accumulated={accumulated}
               />
             )}
             {activeTab === 'settings' && (
@@ -1745,7 +1921,7 @@ function App() {
         <TabButton active={activeTab === 'today'} icon={<BookOpen />} label="今日" onClick={() => setActiveTab('today')} />
         <TabButton active={activeTab === 'import'} icon={<ImagePlus />} label="导入" onClick={() => setActiveTab('import')} />
         <TabButton active={activeTab === 'gallery'} icon={<Images />} label="画廊" onClick={() => setActiveTab('gallery')} />
-        <TabButton active={activeTab === 'calendar'} icon={<CalendarDays />} label="日历" onClick={() => setActiveTab('calendar')} />
+        <TabButton active={activeTab === 'stats'} icon={<BarChart3 />} label="统计" onClick={() => setActiveTab('stats')} />
         <TabButton active={activeTab === 'settings'} icon={<Settings />} label="设置" onClick={() => setActiveTab('settings')} />
       </nav>
 
@@ -1814,14 +1990,10 @@ function TodayView({
   return (
     <section className="animate-card today-tap-area"
       onClick={(e) => {
-        // 不用 new DOMRect（部分 WebView 不支持），直接传普通对象
         onOpenMode({
-          left: e.clientX,
-          top: e.clientY,
-          right: e.clientX,
-          bottom: e.clientY,
-          width: 0,
-          height: 0,
+          left: e.clientX, top: e.clientY,
+          right: e.clientX, bottom: e.clientY,
+          width: 0, height: 0,
         });
       }}
       role="button" tabIndex={0}>
@@ -1865,6 +2037,7 @@ function ImportView({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [activeInput, setActiveInput] = useState<{ itemKey: string; role: ImageRole } | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ index: number; anchor: AnchorRect } | null>(null);
 
   const defaultSubjectId = taxonomiesByType.subject[0]?.id || '';
   const defaultCauseId = taxonomiesByType.cause[0]?.id || '';
@@ -1975,7 +2148,7 @@ function ImportView({
     }, 40);
   };
 
-  const removeItem = (index: number) => {
+  const executeRemoveItem = (index: number) => {
     onItemsChange((current) => {
       if (current.length <= 1) return [createEmptyItem({
         subjectId: defaultSubjectId, causeId: defaultCauseId,
@@ -1996,6 +2169,11 @@ function ImportView({
       if (!el) return;
       el.scrollTo({ left: el.clientWidth * nextIndex, behavior: 'smooth' });
     }, 40);
+  };
+
+  const handleDeleteClick = (index: number, e: React.MouseEvent<HTMLButtonElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setPendingDelete({ index, anchor: toAnchorRect(rect) });
   };
 
   const jumpTo = (index: number) => {
@@ -2158,7 +2336,7 @@ function ImportView({
                   onRemove={(id) => removePending(index, id, 'answer')} />
 
                 {items.length > 1 && (
-                  <MotionTapButton type="button" onClick={() => removeItem(index)}
+                  <MotionTapButton type="button" onClick={(e) => handleDeleteClick(index, e as any)}
                     style={{
                       display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                       minHeight: 36, borderRadius: 'var(--radius-control)',
@@ -2188,6 +2366,22 @@ function ImportView({
 
       {error && <p className="form-error" style={{ padding: '0 16px 10px' }}>{error}</p>}
       <div className="import-swipe-hint">← 左右滑动可切换题目 →</div>
+
+      <AnchorDialog
+        open={!!pendingDelete}
+        anchorRect={pendingDelete?.anchor ?? null}
+        onCancel={() => setPendingDelete(null)}>
+        <div className="anchor-dialog-title">删除第 {pendingDelete ? pendingDelete.index + 1 : ''} 题？</div>
+        <div className="anchor-dialog-desc">这道题已添加的图片和填写的内容会被一起丢掉，无法恢复。</div>
+        <div className="anchor-dialog-actions">
+          <button type="button" className="ad-btn ad-cancel" onClick={() => setPendingDelete(null)}>取消</button>
+          <button type="button" className="ad-btn ad-danger"
+            onClick={() => {
+              if (pendingDelete) executeRemoveItem(pendingDelete.index);
+              setPendingDelete(null);
+            }}>确认删除</button>
+        </div>
+      </AnchorDialog>
     </div>
   );
 }
@@ -2236,9 +2430,7 @@ function GalleryView({
             className={`gallery-mode-btn ${!showArchived ? 'active' : ''}`}
             onClick={() => setShowArchived(false)}>
             {!showArchived && (
-              <motion.span layoutId="gallery-mode-pill"
-                className="gallery-mode-pill"
-                transition={pillTransitionSoft} />
+              <motion.span layoutId="gallery-mode-pill" className="gallery-mode-pill" transition={pillTransitionSoft} />
             )}
             <span className="gallery-mode-btn-label">未归档</span>
           </button>
@@ -2246,9 +2438,7 @@ function GalleryView({
             className={`gallery-mode-btn ${showArchived ? 'active' : ''}`}
             onClick={() => setShowArchived(true)}>
             {showArchived && (
-              <motion.span layoutId="gallery-mode-pill"
-                className="gallery-mode-pill"
-                transition={pillTransitionSoft} />
+              <motion.span layoutId="gallery-mode-pill" className="gallery-mode-pill" transition={pillTransitionSoft} />
             )}
             <span className="gallery-mode-btn-label">
               已归档{archivedCount > 0 ? ` · ${archivedCount}` : ''}
@@ -2446,10 +2636,7 @@ function EditView({
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="edit-shell-wrapper">
       <div className="edit-shell">
         <div className="edit-head">
-          <div>
-            <p className="eyebrow">编辑错题</p>
-            <h1>{draft.title || '未命名'}</h1>
-          </div>
+          <div><p className="eyebrow">编辑错题</p><h1>{draft.title || '未命名'}</h1></div>
           <button type="button" className="icon-button" onClick={onCancel} aria-label="取消编辑"><X size={18} /></button>
         </div>
 
@@ -2574,266 +2761,6 @@ function PreviewGrid({ images, onRemove }: { images: PendingImage[]; onRemove: (
   );
 }
 
-// ===== CalendarStats =====
-function CalendarStats({
-  allMistakes,
-  lastSession,
-}: {
-  allMistakes: MistakeItem[];
-  lastSession: LastSessionSummary | null;
-}) {
-  const totalLive = allMistakes.filter(m => !m.archived).length;
-  const totalArchived = allMistakes.filter(m => m.archived).length;
-  const totalAll = allMistakes.length;
-
-  const stageBuckets = { fresh: 0, learning: 0, familiar: 0, mastered: 0 };
-  allMistakes.forEach((m) => {
-    if (m.archived) return;
-    const s = m.reviewStage ?? 0;
-    if (s <= 1) stageBuckets.fresh += 1;
-    else if (s <= 3) stageBuckets.learning += 1;
-    else if (s <= 5) stageBuckets.familiar += 1;
-    else stageBuckets.mastered += 1;
-  });
-
-  return (
-    <div className="calendar-stats">
-      <div className="calendar-stats-col">
-        <div className="calendar-stats-col-head">
-          <span className="calendar-stats-col-title">全部错题</span>
-          <span className="calendar-stats-col-meta">累计</span>
-        </div>
-        <div className="calendar-stats-scroll">
-          <div className="calendar-stats-grid">
-            <div className="calendar-stat">
-              <div className="calendar-stat-num">{totalAll}</div>
-              <div className="calendar-stat-label">总录入</div>
-            </div>
-            <div className="calendar-stat">
-              <div className="calendar-stat-num">{totalLive}</div>
-              <div className="calendar-stat-label">未归档</div>
-            </div>
-            <div className="calendar-stat">
-              <div className="calendar-stat-num">{totalArchived}</div>
-              <div className="calendar-stat-label">已归档</div>
-            </div>
-          </div>
-          <div className="calendar-stats-bars">
-            <div className="calendar-stat-bar">
-              <span className="calendar-stat-bar-label">生疏</span>
-              <div className="calendar-stat-bar-track">
-                <div className="calendar-stat-bar-fill bar-fresh" style={{ width: `${totalLive > 0 ? (stageBuckets.fresh / totalLive) * 100 : 0}%` }} />
-              </div>
-              <span className="calendar-stat-bar-value">{stageBuckets.fresh}</span>
-            </div>
-            <div className="calendar-stat-bar">
-              <span className="calendar-stat-bar-label">学习中</span>
-              <div className="calendar-stat-bar-track">
-                <div className="calendar-stat-bar-fill bar-learning" style={{ width: `${totalLive > 0 ? (stageBuckets.learning / totalLive) * 100 : 0}%` }} />
-              </div>
-              <span className="calendar-stat-bar-value">{stageBuckets.learning}</span>
-            </div>
-            <div className="calendar-stat-bar">
-              <span className="calendar-stat-bar-label">较熟</span>
-              <div className="calendar-stat-bar-track">
-                <div className="calendar-stat-bar-fill bar-familiar" style={{ width: `${totalLive > 0 ? (stageBuckets.familiar / totalLive) * 100 : 0}%` }} />
-              </div>
-              <span className="calendar-stat-bar-value">{stageBuckets.familiar}</span>
-            </div>
-            <div className="calendar-stat-bar">
-              <span className="calendar-stat-bar-label">已掌握</span>
-              <div className="calendar-stat-bar-track">
-                <div className="calendar-stat-bar-fill bar-mastered" style={{ width: `${totalLive > 0 ? (stageBuckets.mastered / totalLive) * 100 : 0}%` }} />
-              </div>
-              <span className="calendar-stat-bar-value">{stageBuckets.mastered}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="calendar-stats-col">
-        <div className="calendar-stats-col-head">
-          <span className="calendar-stats-col-title">最近一次</span>
-          <span className="calendar-stats-col-meta">
-            {lastSession ? formatShortDate(lastSession.endedAt) : '—'}
-          </span>
-        </div>
-        <div className="calendar-stats-scroll">
-          {lastSession ? (
-            <>
-              <div className="calendar-stats-grid">
-                <div className="calendar-stat">
-                  <div className="calendar-stat-num">{lastSession.answeredCount}</div>
-                  <div className="calendar-stat-label">已答 / {lastSession.totalCount}</div>
-                </div>
-                <div className="calendar-stat">
-                  <div className="calendar-stat-num">{Math.round(lastSession.elapsedSec / 60)}</div>
-                  <div className="calendar-stat-label">分钟</div>
-                </div>
-                <div className="calendar-stat">
-                  <div className="calendar-stat-num">
-                    {lastSession.answeredCount > 0
-                      ? Math.round(lastSession.elapsedSec / lastSession.answeredCount)
-                      : 0}
-                  </div>
-                  <div className="calendar-stat-label">秒 / 题</div>
-                </div>
-              </div>
-              <div className="calendar-stats-bars">
-                <div className="calendar-stat-bar">
-                  <span className="calendar-stat-bar-label">很熟</span>
-                  <div className="calendar-stat-bar-track">
-                    <div className="calendar-stat-bar-fill bar-mastered" style={{ width: `${lastSession.totalCount > 0 ? (lastSession.mastered / lastSession.totalCount) * 100 : 0}%` }} />
-                  </div>
-                  <span className="calendar-stat-bar-value">{lastSession.mastered}</span>
-                </div>
-                <div className="calendar-stat-bar">
-                  <span className="calendar-stat-bar-label">记得</span>
-                  <div className="calendar-stat-bar-track">
-                    <div className="calendar-stat-bar-fill bar-familiar" style={{ width: `${lastSession.totalCount > 0 ? (lastSession.remembered / lastSession.totalCount) * 100 : 0}%` }} />
-                  </div>
-                  <span className="calendar-stat-bar-value">{lastSession.remembered}</span>
-                </div>
-                <div className="calendar-stat-bar">
-                  <span className="calendar-stat-bar-label">有点难</span>
-                  <div className="calendar-stat-bar-track">
-                    <div className="calendar-stat-bar-fill bar-learning" style={{ width: `${lastSession.totalCount > 0 ? (lastSession.struggled / lastSession.totalCount) * 100 : 0}%` }} />
-                  </div>
-                  <span className="calendar-stat-bar-value">{lastSession.struggled}</span>
-                </div>
-                <div className="calendar-stat-bar">
-                  <span className="calendar-stat-bar-label">不会</span>
-                  <div className="calendar-stat-bar-track">
-                    <div className="calendar-stat-bar-fill bar-fresh" style={{ width: `${lastSession.totalCount > 0 ? (lastSession.forgot / lastSession.totalCount) * 100 : 0}%` }} />
-                  </div>
-                  <span className="calendar-stat-bar-value">{lastSession.forgot}</span>
-                </div>
-              </div>
-            </>
-          ) : (
-            <div className="calendar-stats-empty">还没有完成的复习会话</div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ===== CalendarView =====
-function CalendarView({
-  mistakes, allMistakes, lastSession, imagesByMistake, taxonomyMap, selectedDate, onSelectDate
-}: {
-  mistakes: MistakeItem[];
-  allMistakes: MistakeItem[];
-  lastSession: LastSessionSummary | null;
-  imagesByMistake: Map<string, ImageAsset[]>;
-  taxonomyMap: Map<string, string>;
-  selectedDate: string;
-  onSelectDate: (date: string) => void;
-}) {
-  const weekLabels = ['一', '二', '三', '四', '五', '六', '日'];
-  const todayKey = toDateKey(new Date());
-  const days = useMemo(() => {
-    const today = startOfToday();
-    const start = new Date(today);
-    const day = start.getDay() || 7;
-    start.setDate(start.getDate() - day + 1);
-    return Array.from({ length: 35 }, (_, index) => {
-      const date = new Date(start);
-      date.setDate(start.getDate() + index);
-      return date;
-    });
-  }, []);
-
-  const visibleMonth = useMemo(() => {
-    const middle = days[14] ?? new Date();
-    return `${middle.getFullYear()}年${middle.getMonth() + 1}月`;
-  }, [days]);
-
-  const selectedLabel = useMemo(() => {
-    const date = new Date(`${selectedDate}T00:00:00`);
-    return `${date.getMonth() + 1}月${date.getDate()}日 周${weekLabels[(date.getDay() + 6) % 7]}`;
-  }, [selectedDate]);
-
-  const upcomingDays = useMemo(() => {
-    const today = startOfToday();
-    return Array.from({ length: 35 }, (_, index) => {
-      const date = new Date(today);
-      date.setDate(today.getDate() + index);
-      return date;
-    });
-  }, []);
-
-  const countByDay = useMemo(() => {
-    const map = new Map<string, number>();
-    mistakes.forEach((mistake) => {
-      const key = toDateKey(mistake.nextReviewAt);
-      map.set(key, (map.get(key) ?? 0) + 1);
-    });
-    return map;
-  }, [mistakes]);
-
-  const selectedMistakes = mistakes.filter((mistake) => toDateKey(mistake.nextReviewAt) === selectedDate);
-  const upcomingCount = upcomingDays.reduce((total, date) => total + (countByDay.get(toDateKey(date)) ?? 0), 0);
-
-  const selectedPillTransition = { type: 'spring' as const, stiffness: 420, damping: 32, mass: 0.75, restDelta: 0.001 };
-
-  return (
-    <section className="stack">
-      <SectionHeading title="复习概览" meta={`未来35天 ${upcomingCount} 道`} />
-
-      <CalendarStats allMistakes={allMistakes} lastSession={lastSession} />
-
-      <div className="calendar-panel">
-        <div className="calendar-head">
-          <div>
-            <p className="eyebrow">{visibleMonth}</p>
-            <h2>{selectedLabel}</h2>
-          </div>
-          <span>{selectedMistakes.length} 道</span>
-        </div>
-        <div className="calendar-weekdays">
-          {weekLabels.map((label) => <span key={label}>{label}</span>)}
-        </div>
-        <div className="calendar-grid">
-          {days.map((date) => {
-            const key = toDateKey(date);
-            const count = countByDay.get(key) ?? 0;
-            const isSelected = key === selectedDate;
-            const className = [
-              isSelected ? 'selected' : '',
-              key === todayKey ? 'today' : '',
-              count > 0 ? 'has-count' : ''
-            ].filter(Boolean).join(' ');
-            return (
-              <button key={key} type="button" className={className} onClick={() => onSelectDate(key)}>
-                {isSelected && (
-                  <motion.span layoutId="calendar-selected-pill"
-                    className="calendar-selected-pill"
-                    transition={selectedPillTransition} />
-                )}
-                <span>{date.getDate()}</span>
-                <small>{count || ''}</small>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-      <motion.div key={selectedDate}
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
-        className="stack">
-        {selectedMistakes.map((mistake) => (
-          <MistakeCard key={mistake.id} mistake={mistake}
-            images={imagesByMistake.get(mistake.id) ?? []} taxonomyMap={taxonomyMap} />
-        ))}
-        {selectedMistakes.length === 0 && <EmptyState icon={<CalendarDays />} title="这天没有安排" text="日历会随着复习自动变化。" />}
-      </motion.div>
-    </section>
-  );
-}
-
 // ===== SettingsView =====
 function SettingsView({
   settings, taxonomiesByType, theme, onThemeChange, onRefresh, onExport, onImport, onToast
@@ -2906,9 +2833,7 @@ function SettingsView({
                 className={`theme-chip ${active ? 'active' : ''}`}
                 onClick={() => onThemeChange(t.id)}>
                 {active && (
-                  <motion.span layoutId="theme-pill"
-                    className="theme-pill"
-                    transition={pillTransitionSoft} />
+                  <motion.span layoutId="theme-pill" className="theme-pill" transition={pillTransitionSoft} />
                 )}
                 <span className="theme-dot" data-theme-dot={t.id} aria-hidden="true">
                   <span className="theme-dot-bg" />
