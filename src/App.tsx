@@ -24,7 +24,19 @@ import type {
 type TabKey = 'today' | 'import' | 'gallery' | 'calendar' | 'settings' | 'review' | 'edit';
 type SettingsPanel = 'taxonomy' | 'review' | 'theme' | 'backup' | 'storage';
 
-type ThemeId = 'xuanzhi' | 'qinghua' | 'moyu' | 'yanzhi' | 'zhuqing';
+type ThemeId =
+  | 'xuanzhi' | 'qinghua' | 'moyu' | 'yanzhi' | 'zhuqing'
+  | 'zheshi' | 'dailan' | 'chahe' | 'tenghuang' | 'zitan';
+
+/** 通用锚点矩形：不用 DOMRect，兼容所有 WebView */
+interface AnchorRect {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  width: number;
+  height: number;
+}
 
 interface PendingImage { id: string; file: File; url: string; }
 interface ImportItem {
@@ -34,27 +46,51 @@ interface ImportItem {
   answerImages: PendingImage[];
 }
 
+interface LastSessionSummary {
+  kind: ReviewSessionKind;
+  subjectName?: string;
+  totalCount: number;
+  answeredCount: number;
+  forgot: number;
+  struggled: number;
+  remembered: number;
+  mastered: number;
+  elapsedSec: number;
+  endedAt: string;
+}
+
 const taxonomyTitles: Record<TaxonomyType, string> = { subject: '科目', cause: '错因', source: '题源快捷项' };
 
 const ALL_SUBJECTS_ID = '__all__';
 
 const THEMES: { id: ThemeId; name: string }[] = [
-  { id: 'xuanzhi', name: '宣纸' },
-  { id: 'qinghua', name: '青花' },
-  { id: 'moyu',    name: '墨玉' },
-  { id: 'yanzhi',  name: '胭脂' },
-  { id: 'zhuqing', name: '竹青' },
+  { id: 'xuanzhi',   name: '宣纸' },
+  { id: 'qinghua',   name: '青花' },
+  { id: 'moyu',      name: '墨玉' },
+  { id: 'yanzhi',    name: '胭脂' },
+  { id: 'zhuqing',   name: '竹青' },
+  { id: 'zheshi',    name: '赭石' },
+  { id: 'dailan',    name: '黛蓝' },
+  { id: 'chahe',     name: '茶褐' },
+  { id: 'tenghuang', name: '藤黄' },
+  { id: 'zitan',     name: '紫檀' },
 ];
 
 const THEME_COLORS: Record<ThemeId, string> = {
-  xuanzhi: '#f4efe4',
-  qinghua: '#eef2f7',
-  moyu:    '#16161a',
-  yanzhi:  '#f6ece9',
-  zhuqing: '#edf2ec',
+  xuanzhi:   '#f4efe4',
+  qinghua:   '#eef2f7',
+  moyu:      '#16161a',
+  yanzhi:    '#f6ece9',
+  zhuqing:   '#edf2ec',
+  zheshi:    '#f0e6db',
+  dailan:    '#ecf0f4',
+  chahe:     '#f2ece0',
+  tenghuang: '#f7f0dc',
+  zitan:     '#17121a',
 };
 
 const THEME_KEY = 'cuotiben.theme.v1';
+const LAST_SESSION_KEY = 'cuotiben.lastSession.v1';
 
 const emptyDraft: MistakeDraft = {
   title: '', note: '', answer: '', inspiration: '',
@@ -80,6 +116,16 @@ const IMPORT_LEGACY_DRAFT_KEY = 'cuotiben.importDraft.v1';
 const NORMAL_SESSION_KEY = 'cuotiben.reviewSession.normal.v1';
 const EXAM_SESSION_KEY = 'cuotiben.reviewSession.exam.v1';
 const PAGE_SIZE = 15;
+
+/** 把 DOMRect（getBoundingClientRect 的返回值）转成普通对象 */
+const toAnchorRect = (rect: DOMRect): AnchorRect => ({
+  left: rect.left,
+  top: rect.top,
+  right: rect.right,
+  bottom: rect.bottom,
+  width: rect.width,
+  height: rect.height,
+});
 
 const releasePendingImages = (list: PendingImage[]) => {
   list.forEach((image) => URL.revokeObjectURL(image.url));
@@ -107,6 +153,20 @@ const loadTheme = (): ThemeId => {
     if (saved && THEMES.some(t => t.id === saved)) return saved;
   } catch {}
   return 'moyu';
+};
+
+const loadLastSession = (): LastSessionSummary | null => {
+  try {
+    const raw = window.localStorage.getItem(LAST_SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as LastSessionSummary;
+    if (!parsed || typeof parsed.totalCount !== 'number') return null;
+    return parsed;
+  } catch { return null; }
+};
+
+const saveLastSession = (summary: LastSessionSummary) => {
+  try { window.localStorage.setItem(LAST_SESSION_KEY, JSON.stringify(summary)); } catch {}
 };
 
 const loadImportItems = (): ImportItem[] => {
@@ -144,19 +204,9 @@ const loadSession = (kind: ReviewSessionKind): ReviewSessionProgress | null => {
 
 const saveSession = (session: ReviewSessionProgress) => {
   try {
-    if (!session.mistakeIds || session.mistakeIds.length === 0) {
-      console.warn('[错题本] 拒绝保存空会话（mistakeIds 为空）');
-      return;
-    }
+    if (!session.mistakeIds || session.mistakeIds.length === 0) return;
     const key = session.kind === 'normal' ? NORMAL_SESSION_KEY : EXAM_SESSION_KEY;
-    const payload = JSON.stringify(session);
-    window.localStorage.setItem(key, payload);
-    const readback = window.localStorage.getItem(key);
-    if (readback !== payload) {
-      console.error('[错题本] 会话保存后回读不一致', {
-        key, expectedLength: payload.length, actualLength: readback?.length ?? 0
-      });
-    }
+    window.localStorage.setItem(key, JSON.stringify(session));
   } catch (err) { console.error('[错题本] 保存复习会话失败', err); }
 };
 
@@ -176,20 +226,46 @@ const shuffleArray = <T,>(arr: T[]): T[] => {
   return next;
 };
 
-// ===== 锚定弹窗 =====
+const formatTime = (sec: number): string => {
+  const safe = Math.max(0, Math.floor(sec));
+  const h = Math.floor(safe / 3600);
+  const m = Math.floor((safe % 3600) / 60);
+  const s = safe % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+};
+
+const formatDuration = (sec: number): string => {
+  const safe = Math.max(0, Math.floor(sec));
+  const h = Math.floor(safe / 3600);
+  const m = Math.floor((safe % 3600) / 60);
+  const s = safe % 60;
+  if (h > 0) return `${h} 小时 ${m} 分 ${s} 秒`;
+  if (m > 0) return `${m} 分 ${s} 秒`;
+  return `${s} 秒`;
+};
+
+// ===== 锚定弹窗（跟手点击位置） =====
 function AnchorDialog({
   open, anchorRect, onCancel, children
-}: { open: boolean; anchorRect: DOMRect | null; onCancel: () => void; children: ReactNode }) {
+}: { open: boolean; anchorRect: AnchorRect | null; onCancel: () => void; children: ReactNode }) {
   const [pos, setPos] = useState<{ left: number; top: number; transform: string }>({
-    left: 0, top: 0, transform: 'translate(-50%, -100%)'
+    left: 0, top: 0, transform: 'translate(-50%, -50%)'
   });
 
   useEffect(() => {
-    if (!open || !anchorRect) return;
+    if (!open) return;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     const dialogWidth = Math.min(360, vw - 32);
     const margin = 12;
+
+    // 理论上不会走到这里；万一 anchorRect 为 null（极端异常），也只是临时的视觉兜底
+    if (!anchorRect) {
+      setPos({ left: vw / 2, top: vh / 2, transform: 'translate(-50%, -50%)' });
+      return;
+    }
+
     let left = anchorRect.left + anchorRect.width / 2;
     left = Math.max(dialogWidth / 2 + 16, Math.min(vw - dialogWidth / 2 - 16, left));
     const spaceAbove = anchorRect.top;
@@ -223,7 +299,7 @@ function AnchorDialog({
   return createPortal(dialog, document.body);
 }
 
-// ===== 居中弹窗 =====
+// ===== 居中弹窗（仅用于选项多、不适合锚定的场景） =====
 function CenterDialog({
   open, onCancel, children
 }: { open: boolean; onCancel: () => void; children: ReactNode }) {
@@ -420,9 +496,276 @@ function ImageLightbox({ image, onClose }: { image: { src: string; title: string
   return createPortal(node, document.body);
 }
 
+// ===== 计时器时长选择弹窗（锚定在倒计时按钮上） =====
+function TimerPickDialog({
+  open, anchorRect, onCancel, onPick
+}: {
+  open: boolean; anchorRect: AnchorRect | null;
+  onCancel: () => void;
+  onPick: (minutes: number) => void;
+}) {
+  const [customOpen, setCustomOpen] = useState(false);
+  const [customValue, setCustomValue] = useState('20');
+
+  useEffect(() => {
+    if (!open) { setCustomOpen(false); setCustomValue('20'); }
+  }, [open]);
+
+  const presets = [5, 10, 15, 20, 30, 45, 60];
+
+  const handleCustomConfirm = () => {
+    const n = Number(customValue);
+    if (!Number.isFinite(n) || n <= 0 || n > 600) return;
+    onPick(Math.round(n));
+    setCustomOpen(false);
+  };
+
+  return (
+    <AnchorDialog open={open} anchorRect={anchorRect} onCancel={onCancel}>
+      <div className="timer-pick-dialog">
+        <h2 className="mode-dialog-title">选择时长</h2>
+        <div className="timer-pick-presets">
+          {presets.map((m) => (
+            <button key={m} type="button" className="timer-pick-chip" onClick={() => onPick(m)}>
+              {m} 分钟
+            </button>
+          ))}
+        </div>
+        <div className="timer-pick-custom-row">
+          {!customOpen ? (
+            <button type="button" className="timer-pick-custom-btn" onClick={() => setCustomOpen(true)}>
+              自定义
+            </button>
+          ) : (
+            <>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={600}
+                className="timer-pick-input"
+                value={customValue}
+                onChange={(e) => setCustomValue(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleCustomConfirm(); }}
+                autoFocus
+              />
+              <span className="timer-pick-unit">分钟</span>
+              <button type="button" className="timer-pick-ok" onClick={handleCustomConfirm}>确定</button>
+            </>
+          )}
+        </div>
+        <button type="button" className="mode-cancel" onClick={onCancel}>取消</button>
+      </div>
+    </AnchorDialog>
+  );
+}
+
+// ===== 计时器 =====
+function SessionTimer({
+  kind,
+  running,
+  elapsedSec,
+  onTick,
+  onTimeUp,
+}: {
+  kind: ReviewSessionKind;
+  running: boolean;
+  elapsedSec: number;
+  onTick: (sec: number) => void;
+  onTimeUp: () => void;
+}) {
+  const isExam = kind === 'exam';
+  const [mode, setMode] = useState<'up' | 'down'>('up');
+  const [countdownSec, setCountdownSec] = useState(0);
+  const [countdownTotal, setCountdownTotal] = useState(0);
+  const [pickOpen, setPickOpen] = useState(false);
+  const [pickAnchor, setPickAnchor] = useState<AnchorRect | null>(null);
+  const downBtnRef = useRef<HTMLButtonElement>(null);
+
+  const elapsedRef = useRef(elapsedSec);
+  useEffect(() => { elapsedRef.current = elapsedSec; }, [elapsedSec]);
+
+  const firedRef = useRef(false);
+
+  useEffect(() => {
+    if (!running) return;
+    const timer = window.setInterval(() => {
+      if (mode === 'up' || !isExam) {
+        const next = elapsedRef.current + 1;
+        elapsedRef.current = next;
+        onTick(next);
+      }
+      if (isExam && mode === 'down') {
+        setCountdownSec((prev) => {
+          if (prev <= 1) {
+            if (!firedRef.current) {
+              firedRef.current = true;
+              window.setTimeout(() => onTimeUp(), 0);
+            }
+            return 0;
+          }
+          return prev - 1;
+        });
+      }
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [running, mode, isExam, onTick, onTimeUp]);
+
+  const openPick = () => {
+    if (downBtnRef.current) setPickAnchor(toAnchorRect(downBtnRef.current.getBoundingClientRect()));
+    setPickOpen(true);
+  };
+
+  const handlePick = (minutes: number) => {
+    setCountdownTotal(minutes * 60);
+    setCountdownSec(minutes * 60);
+    setMode('down');
+    setPickOpen(false);
+    firedRef.current = false;
+  };
+
+  const handleUpClick = () => {
+    setMode('up');
+    firedRef.current = false;
+  };
+
+  const displaySec = mode === 'down' ? countdownSec : elapsedSec;
+  const progress = mode === 'down' && countdownTotal > 0
+    ? Math.min(1, Math.max(0, 1 - countdownSec / countdownTotal))
+    : 0;
+
+  return (
+    <div className="session-timer">
+      <div className="session-timer-main">
+        <span className="session-timer-label">
+          {mode === 'down' ? '倒计时' : '已用时'}
+        </span>
+        <span className={`session-timer-value ${mode === 'down' && countdownSec <= 60 ? 'urgent' : ''}`}>
+          {formatTime(displaySec)}
+        </span>
+        {mode === 'down' && countdownTotal > 0 && (
+          <div className="session-timer-progress">
+            <div className="session-timer-progress-fill" style={{ width: `${progress * 100}%` }} />
+          </div>
+        )}
+      </div>
+      {isExam && (
+        <div className="session-timer-modes">
+          <button
+            type="button"
+            className={`session-timer-mode-btn ${mode === 'up' ? 'active' : ''}`}
+            onClick={handleUpClick}>
+            正计时
+          </button>
+          <button
+            ref={downBtnRef}
+            type="button"
+            className={`session-timer-mode-btn ${mode === 'down' ? 'active' : ''}`}
+            onClick={openPick}>
+            倒计时
+          </button>
+        </div>
+      )}
+      <TimerPickDialog
+        open={pickOpen}
+        anchorRect={pickAnchor}
+        onCancel={() => setPickOpen(false)}
+        onPick={handlePick}
+      />
+    </div>
+  );
+}
+
+// ===== 会话总结 =====
+function SessionSummary({
+  kind,
+  subjectName,
+  totalCount,
+  answeredCount,
+  stats,
+  elapsedSec,
+  onClose,
+}: {
+  kind: ReviewSessionKind;
+  subjectName?: string;
+  totalCount: number;
+  answeredCount: number;
+  stats: Record<ReviewResult, number>;
+  elapsedSec: number;
+  onClose: () => void;
+}) {
+  const avgSec = answeredCount > 0 ? Math.round(elapsedSec / answeredCount) : 0;
+  const sorted: { key: ReviewResult; label: string; value: number; cls: string }[] = [
+    { key: 'mastered',   label: '很熟',   value: stats.mastered,   cls: 'mastered' },
+    { key: 'remembered', label: '记得',   value: stats.remembered, cls: 'remembered' },
+    { key: 'struggled',  label: '有点难', value: stats.struggled,  cls: 'struggled' },
+    { key: 'forgot',     label: '不会',   value: stats.forgot,     cls: 'forgot' },
+  ];
+  const maxValue = Math.max(1, ...sorted.map(s => s.value));
+
+  return createPortal(
+    <AnimatePresence>
+      <motion.div className="dialog-blur-backdrop"
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        transition={{ duration: 0.2 }}>
+        <motion.div className="center-dialog session-summary"
+          initial={{ opacity: 0, scale: 0.94, x: '-50%', y: '-50%' }}
+          animate={{ opacity: 1, scale: 1, x: '-50%', y: '-50%' }}
+          exit={{ opacity: 0, scale: 0.96, x: '-50%', y: '-50%' }}
+          transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+          onClick={(e) => e.stopPropagation()}>
+          <div className="summary-head">
+            <div className="summary-eyebrow">
+              {kind === 'exam' ? `备考${subjectName ? ' · ' + subjectName : ''}` : '今日复习'}
+            </div>
+            <h2 className="summary-title">本次完成</h2>
+          </div>
+
+          <div className="summary-topline">
+            <div className="summary-big">
+              <span className="summary-big-num">{answeredCount}</span>
+              <span className="summary-big-unit">/ {totalCount} 道</span>
+            </div>
+            <div className="summary-topright">
+              <div className="summary-topright-item">
+                <span className="summary-topright-label">总耗时</span>
+                <span className="summary-topright-value">{formatDuration(elapsedSec)}</span>
+              </div>
+              <div className="summary-topright-item">
+                <span className="summary-topright-label">平均每题</span>
+                <span className="summary-topright-value">{avgSec} 秒</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="summary-bars">
+            {sorted.map((s) => (
+              <div className="summary-bar-row" key={s.key}>
+                <span className={`summary-bar-label summary-bar-${s.cls}`}>{s.label}</span>
+                <div className="summary-bar-track">
+                  <div
+                    className={`summary-bar-fill summary-bar-fill-${s.cls}`}
+                    style={{ width: `${(s.value / maxValue) * 100}%` }}
+                  />
+                </div>
+                <span className="summary-bar-value">{s.value}</span>
+              </div>
+            ))}
+          </div>
+
+          <button type="button" className="primary-action summary-close" onClick={onClose}>
+            完成
+          </button>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>,
+    document.body
+  );
+}
+
 // ===== 沉浸式复习 =====
 function ReviewFullscreen({
-  kind, subjectName, sessionMistakeIds, mistakes, imagesByMistake, initialProgress, onAnswered, onSaveProgress, onExit, onClearSession, onToast
+  kind, subjectName, sessionMistakeIds, mistakes, imagesByMistake, initialProgress, onAnswered, onSaveProgress, onExit, onClearSession, onToast, onSessionComplete
 }: {
   kind: ReviewSessionKind;
   subjectName?: string;
@@ -435,6 +778,7 @@ function ReviewFullscreen({
   onExit: () => void;
   onClearSession: (kind: ReviewSessionKind) => void;
   onToast: (msg: string) => void;
+  onSessionComplete: (summary: LastSessionSummary) => void;
 }) {
   const total = mistakes.length;
   const [index, setIndex] = useState(initialProgress?.currentIndex ?? 0);
@@ -448,11 +792,17 @@ function ReviewFullscreen({
     return s;
   });
   const [exitOpen, setExitOpen] = useState(false);
-  const [exitAnchor, setExitAnchor] = useState<DOMRect | null>(null);
+  const [exitAnchor, setExitAnchor] = useState<AnchorRect | null>(null);
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const [discardAnchor, setDiscardAnchor] = useState<AnchorRect | null>(null);
   const [preview, setPreview] = useState<{ src: string; title: string } | null>(null);
   const [questionUrls, setQuestionUrls] = useState<string[]>([]);
   const [answerUrls, setAnswerUrls] = useState<string[]>([]);
+  const [elapsedSec, setElapsedSec] = useState(0);
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [finishedByTimeout, setFinishedByTimeout] = useState(false);
   const exitBtnRef = useRef<HTMLButtonElement>(null);
+  const discardBtnRef = useRef<HTMLButtonElement>(null);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const safeIndex = total > 0 ? Math.min(Math.max(index, 0), total - 1) : 0;
@@ -498,6 +848,12 @@ function ReviewFullscreen({
     setIndex(nextIndex);
   };
 
+  const goToPage = (nextPage: number) => {
+    if (nextPage < 0 || nextPage >= totalPages) return;
+    setPage(nextPage);
+    goTo(nextPage * PAGE_SIZE);
+  };
+
   const revealAnswer = () => {
     if (!current) return;
     setRevealedIds(prev => {
@@ -506,6 +862,38 @@ function ReviewFullscreen({
       next.add(current.id);
       return next;
     });
+  };
+
+  const buildSummary = (finalAnswered: Record<string, ReviewResult>): LastSessionSummary => {
+    const stats: Record<ReviewResult, number> = { forgot: 0, struggled: 0, remembered: 0, mastered: 0 };
+    let answered = 0;
+    mistakes.forEach((m) => {
+      const r = finalAnswered[m.id];
+      if (r) {
+        stats[r] += 1;
+        answered += 1;
+      } else {
+        stats.forgot += 1;
+      }
+    });
+    return {
+      kind,
+      subjectName,
+      totalCount: mistakes.length,
+      answeredCount: answered,
+      forgot: stats.forgot,
+      struggled: stats.struggled,
+      remembered: stats.remembered,
+      mastered: stats.mastered,
+      elapsedSec,
+      endedAt: new Date().toISOString(),
+    };
+  };
+
+  const finishWithSummary = (finalAnswered: Record<string, ReviewResult>) => {
+    const summary = buildSummary(finalAnswered);
+    onSessionComplete(summary);
+    setSummaryOpen(true);
   };
 
   const handleAnswered = async (result: ReviewResult) => {
@@ -525,8 +913,9 @@ function ReviewFullscreen({
     const allAnswered = mistakes.every(m => nextAnswered[m.id]);
     if (allAnswered) {
       onClearSession(kind);
-      onToast('全部完成！');
-      window.setTimeout(() => onExit(), 350);
+      window.setTimeout(() => {
+        finishWithSummary(nextAnswered);
+      }, 220);
       return;
     }
     if (isFirstAnswer && safeIndex + 1 < total) {
@@ -534,14 +923,24 @@ function ReviewFullscreen({
     }
   };
 
+  const handleTimeUp = () => {
+    if (finishedByTimeout) return;
+    setFinishedByTimeout(true);
+    onClearSession(kind);
+    finishWithSummary(answeredResults);
+  };
+
+  const handleSummaryClose = () => {
+    setSummaryOpen(false);
+    onExit();
+  };
+
   const handleExitClick = () => {
-    if (exitBtnRef.current) setExitAnchor(exitBtnRef.current.getBoundingClientRect());
+    if (exitBtnRef.current) setExitAnchor(toAnchorRect(exitBtnRef.current.getBoundingClientRect()));
     setExitOpen(true);
   };
 
   const handleSaveAndExit = () => {
-    // 关键修复：保存时用会话原始的 mistakeIds，而不是当前渲染列表反推。
-    // 之前用 mistakes.map(m => m.id)，如果某些题没加载出来会被静默丢掉。
     const finalMistakeIds = sessionMistakeIds.length > 0
       ? sessionMistakeIds
       : mistakes.map(m => m.id);
@@ -562,7 +961,13 @@ function ReviewFullscreen({
     onExit();
   };
 
-  const handleDiscardAndExit = () => {
+  const handleDiscardClick = () => {
+    if (discardBtnRef.current) setDiscardAnchor(toAnchorRect(discardBtnRef.current.getBoundingClientRect()));
+    setDiscardOpen(true);
+  };
+
+  const handleDiscardConfirm = () => {
+    setDiscardOpen(false);
     setExitOpen(false);
     onClearSession(kind);
     onExit();
@@ -655,34 +1060,53 @@ function ReviewFullscreen({
       <div className="review-right">
         <div className="review-right-body">
           <h3 className="review-right-title">题号</h3>
-          <div className="review-page-numbers">
-            {pageIndexes.map((i) => {
-              const isActive = i === safeIndex;
-              const isAnswered = !!answeredResults[mistakes[i].id];
-              return (
-                <button key={i} type="button"
-                  className={`review-page-num ${isActive ? 'active' : ''} ${isAnswered ? 'answered' : ''}`}
-                  onClick={() => goTo(i)}>
-                  {isActive && (
-                    <motion.span layoutId="review-num-pill" className="review-num-pill" transition={numPillTransition} />
-                  )}
-                  <span className="review-num-label">{i + 1}</span>
-                </button>
-              );
-            })}
+          <div className="review-page-numbers-wrap">
+            <motion.div
+              className="review-page-numbers"
+              drag="x"
+              dragConstraints={{ left: 0, right: 0 }}
+              dragElastic={0.15}
+              onDragEnd={(_, info) => {
+                if (info.offset.x < -60 || info.velocity.x < -400) goToPage(page + 1);
+                else if (info.offset.x > 60 || info.velocity.x > 400) goToPage(page - 1);
+              }}>
+              {pageIndexes.map((i) => {
+                const isActive = i === safeIndex;
+                const isAnswered = !!answeredResults[mistakes[i].id];
+                return (
+                  <button key={i} type="button"
+                    className={`review-page-num ${isActive ? 'active' : ''} ${isAnswered ? 'answered' : ''}`}
+                    onClick={() => goTo(i)}>
+                    {isActive && (
+                      <motion.span layoutId="review-num-pill" className="review-num-pill" transition={numPillTransition} />
+                    )}
+                    <span className="review-num-label">{i + 1}</span>
+                  </button>
+                );
+              })}
+            </motion.div>
           </div>
           <div className="review-page-arrows">
             <button type="button" className="review-page-arrow" disabled={page === 0}
-              onClick={() => { const p = Math.max(0, page - 1); setPage(p); goTo(p * PAGE_SIZE); }}>‹</button>
+              onClick={() => goToPage(page - 1)}>‹</button>
             <span className="review-page-indicator">{page + 1} / {totalPages}</span>
             <button type="button" className="review-page-arrow" disabled={page >= totalPages - 1}
-              onClick={() => { const p = Math.min(totalPages - 1, page + 1); setPage(p); goTo(p * PAGE_SIZE); }}>›</button>
+              onClick={() => goToPage(page + 1)}>›</button>
           </div>
         </div>
 
-        <button ref={exitBtnRef} className="review-exit-btn" type="button" onClick={handleExitClick}>
-          退出复习
-        </button>
+        <div className="review-bottom-area">
+          <SessionTimer
+            kind={kind}
+            running={!summaryOpen}
+            elapsedSec={elapsedSec}
+            onTick={setElapsedSec}
+            onTimeUp={handleTimeUp}
+          />
+          <button ref={exitBtnRef} className="review-exit-btn" type="button" onClick={handleExitClick}>
+            退出复习
+          </button>
+        </div>
       </div>
 
       <AnchorDialog open={exitOpen} anchorRect={exitAnchor} onCancel={() => setExitOpen(false)}>
@@ -691,9 +1115,38 @@ function ReviewFullscreen({
         <div className="anchor-dialog-actions anchor-actions-exit">
           <button type="button" className="ad-btn ad-cancel" onClick={() => setExitOpen(false)}>继续复习</button>
           <button type="button" className="ad-btn ad-save" onClick={handleSaveAndExit}>保存进度</button>
-          <button type="button" className="ad-btn ad-danger" onClick={handleDiscardAndExit}>放弃退出</button>
+          <button ref={discardBtnRef} type="button" className="ad-btn ad-danger" onClick={handleDiscardClick}>放弃退出</button>
         </div>
       </AnchorDialog>
+
+      <AnchorDialog open={discardOpen} anchorRect={discardAnchor} onCancel={() => setDiscardOpen(false)}>
+        <div className="anchor-dialog-title">确认放弃？</div>
+        <div className="anchor-dialog-desc">这次所有答题记录会直接丢失，无法恢复。</div>
+        <div className="anchor-dialog-actions">
+          <button type="button" className="ad-btn ad-cancel" onClick={() => setDiscardOpen(false)}>取消</button>
+          <button type="button" className="ad-btn ad-danger" onClick={handleDiscardConfirm}>确认放弃</button>
+        </div>
+      </AnchorDialog>
+
+      {summaryOpen && (
+        <SessionSummary
+          kind={kind}
+          subjectName={subjectName}
+          totalCount={total}
+          answeredCount={Object.keys(answeredResults).length}
+          stats={(() => {
+            const s: Record<ReviewResult, number> = { forgot: 0, struggled: 0, remembered: 0, mastered: 0 };
+            mistakes.forEach((m) => {
+              const r = answeredResults[m.id];
+              if (r) s[r] += 1;
+              else s.forgot += 1;
+            });
+            return s;
+          })()}
+          elapsedSec={elapsedSec}
+          onClose={handleSummaryClose}
+        />
+      )}
 
       <ImageLightbox image={preview} onClose={() => setPreview(null)} />
     </div>
@@ -705,7 +1158,7 @@ function ModeDialog({
   open, anchorRect, onCancel, onPickNormal, onPickExam, normalHasSave, examHasSave, normalDueCount
 }: {
   open: boolean;
-  anchorRect: DOMRect | null;
+  anchorRect: AnchorRect | null;
   onCancel: () => void;
   onPickNormal: () => void;
   onPickExam: () => void;
@@ -741,11 +1194,11 @@ function ModeDialog({
   );
 }
 
-// ===== 备考设置弹窗（改为锚定） =====
+// ===== 备考设置弹窗 =====
 function ExamSetupDialog({
   open, anchorRect, subjects, onCancel, onStart
 }: {
-  open: boolean; anchorRect: DOMRect | null;
+  open: boolean; anchorRect: AnchorRect | null;
   subjects: { id: string; name: string }[]; onCancel: () => void;
   onStart: (subjectId: string, subjectName: string, orderBy: ExamOrderBy, includeArchived: boolean) => void;
 }) {
@@ -840,11 +1293,11 @@ function ExamSetupDialog({
   );
 }
 
-// ===== 继续/重开弹窗（改为锚定） =====
+// ===== 继续/重开弹窗 =====
 function ResumeDialog({
   open, anchorRect, kind, onCancel, onResume, onRestart
 }: {
-  open: boolean; anchorRect: DOMRect | null; kind: ReviewSessionKind;
+  open: boolean; anchorRect: AnchorRect | null; kind: ReviewSessionKind;
   onCancel: () => void; onResume: () => void; onRestart: () => void;
 }) {
   return (
@@ -879,7 +1332,7 @@ function App() {
   const [importIndex, setImportIndex] = useState(0);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [modeDialogOpen, setModeDialogOpen] = useState(false);
-  const [modeDialogAnchor, setModeDialogAnchor] = useState<DOMRect | null>(null);
+  const [modeDialogAnchor, setModeDialogAnchor] = useState<AnchorRect | null>(null);
   const [examSetupOpen, setExamSetupOpen] = useState(false);
   const [resumeKind, setResumeKind] = useState<ReviewSessionKind | null>(null);
   const [reviewSession, setReviewSession] = useState<{
@@ -888,6 +1341,7 @@ function App() {
   const [normalHasSave, setNormalHasSave] = useState(false);
   const [examHasSave, setExamHasSave] = useState(false);
   const [theme, setTheme] = useState<ThemeId>(() => loadTheme());
+  const [lastSession, setLastSession] = useState<LastSessionSummary | null>(() => loadLastSession());
   const importItemsRef = useRef<ImportItem[]>([]);
   const draftImagesLoadedRef = useRef(false);
   const galleryScrollRef = useRef<number>(0);
@@ -1042,7 +1496,7 @@ function App() {
     setToast('已恢复备份');
   };
 
-  const openModeDialog = (rect?: DOMRect) => {
+  const openModeDialog = (rect?: AnchorRect) => {
     setModeDialogAnchor(rect ?? null);
     setNormalHasSave(!!loadSession('normal'));
     setExamHasSave(!!loadSession('exam'));
@@ -1126,6 +1580,11 @@ function App() {
 
   const handleSaveSession = (progress: ReviewSessionProgress) => { saveSession(progress); };
 
+  const handleSessionComplete = (summary: LastSessionSummary) => {
+    saveLastSession(summary);
+    setLastSession(summary);
+  };
+
   const handleExitReview = async () => {
     setReviewSession(null);
     setActiveTab('today');
@@ -1172,6 +1631,7 @@ function App() {
         onExit={handleExitReview}
         onClearSession={clearSession}
         onToast={setToast}
+        onSessionComplete={handleSessionComplete}
       />
     );
   }
@@ -1257,6 +1717,8 @@ function App() {
             {activeTab === 'calendar' && (
               <CalendarView
                 mistakes={liveMistakes}
+                allMistakes={mistakes}
+                lastSession={lastSession}
                 imagesByMistake={imagesByMistake}
                 taxonomyMap={taxonomyMap}
                 selectedDate={selectedDate}
@@ -1346,12 +1808,22 @@ function TabButton({ active, icon, label, onClick }: { active: boolean; icon: JS
 // ===== TodayView =====
 function TodayView({
   dueMistakes, onOpenMode, normalHasSave, examHasSave
-}: { dueMistakes: MistakeItem[]; onOpenMode: (rect?: DOMRect) => void; normalHasSave: boolean; examHasSave: boolean; }) {
+}: { dueMistakes: MistakeItem[]; onOpenMode: (rect?: AnchorRect) => void; normalHasSave: boolean; examHasSave: boolean; }) {
   const hasDue = dueMistakes.length > 0;
   const hasSave = normalHasSave || examHasSave;
   return (
     <section className="animate-card today-tap-area"
-      onClick={(e) => onOpenMode(new DOMRect(e.clientX, e.clientY, 0, 0))}
+      onClick={(e) => {
+        // 不用 new DOMRect（部分 WebView 不支持），直接传普通对象
+        onOpenMode({
+          left: e.clientX,
+          top: e.clientY,
+          right: e.clientX,
+          bottom: e.clientY,
+          width: 0,
+          height: 0,
+        });
+      }}
       role="button" tabIndex={0}>
       <div className="today-tap-body">
         {hasDue ? (
@@ -1737,7 +2209,7 @@ function GalleryView({
   const [difficulty, setDifficulty] = useState('');
   const [showArchived, setShowArchived] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<MistakeItem | null>(null);
-  const [deleteAnchor, setDeleteAnchor] = useState<DOMRect | null>(null);
+  const [deleteAnchor, setDeleteAnchor] = useState<AnchorRect | null>(null);
 
   const difficultyOptions = (['hard', 'medium', 'easy'] as Difficulty[]).map((item) => ({
     id: item, name: difficultyLabel[item]
@@ -2102,12 +2574,162 @@ function PreviewGrid({ images, onRemove }: { images: PendingImage[]; onRemove: (
   );
 }
 
+// ===== CalendarStats =====
+function CalendarStats({
+  allMistakes,
+  lastSession,
+}: {
+  allMistakes: MistakeItem[];
+  lastSession: LastSessionSummary | null;
+}) {
+  const totalLive = allMistakes.filter(m => !m.archived).length;
+  const totalArchived = allMistakes.filter(m => m.archived).length;
+  const totalAll = allMistakes.length;
+
+  const stageBuckets = { fresh: 0, learning: 0, familiar: 0, mastered: 0 };
+  allMistakes.forEach((m) => {
+    if (m.archived) return;
+    const s = m.reviewStage ?? 0;
+    if (s <= 1) stageBuckets.fresh += 1;
+    else if (s <= 3) stageBuckets.learning += 1;
+    else if (s <= 5) stageBuckets.familiar += 1;
+    else stageBuckets.mastered += 1;
+  });
+
+  return (
+    <div className="calendar-stats">
+      <div className="calendar-stats-col">
+        <div className="calendar-stats-col-head">
+          <span className="calendar-stats-col-title">全部错题</span>
+          <span className="calendar-stats-col-meta">累计</span>
+        </div>
+        <div className="calendar-stats-scroll">
+          <div className="calendar-stats-grid">
+            <div className="calendar-stat">
+              <div className="calendar-stat-num">{totalAll}</div>
+              <div className="calendar-stat-label">总录入</div>
+            </div>
+            <div className="calendar-stat">
+              <div className="calendar-stat-num">{totalLive}</div>
+              <div className="calendar-stat-label">未归档</div>
+            </div>
+            <div className="calendar-stat">
+              <div className="calendar-stat-num">{totalArchived}</div>
+              <div className="calendar-stat-label">已归档</div>
+            </div>
+          </div>
+          <div className="calendar-stats-bars">
+            <div className="calendar-stat-bar">
+              <span className="calendar-stat-bar-label">生疏</span>
+              <div className="calendar-stat-bar-track">
+                <div className="calendar-stat-bar-fill bar-fresh" style={{ width: `${totalLive > 0 ? (stageBuckets.fresh / totalLive) * 100 : 0}%` }} />
+              </div>
+              <span className="calendar-stat-bar-value">{stageBuckets.fresh}</span>
+            </div>
+            <div className="calendar-stat-bar">
+              <span className="calendar-stat-bar-label">学习中</span>
+              <div className="calendar-stat-bar-track">
+                <div className="calendar-stat-bar-fill bar-learning" style={{ width: `${totalLive > 0 ? (stageBuckets.learning / totalLive) * 100 : 0}%` }} />
+              </div>
+              <span className="calendar-stat-bar-value">{stageBuckets.learning}</span>
+            </div>
+            <div className="calendar-stat-bar">
+              <span className="calendar-stat-bar-label">较熟</span>
+              <div className="calendar-stat-bar-track">
+                <div className="calendar-stat-bar-fill bar-familiar" style={{ width: `${totalLive > 0 ? (stageBuckets.familiar / totalLive) * 100 : 0}%` }} />
+              </div>
+              <span className="calendar-stat-bar-value">{stageBuckets.familiar}</span>
+            </div>
+            <div className="calendar-stat-bar">
+              <span className="calendar-stat-bar-label">已掌握</span>
+              <div className="calendar-stat-bar-track">
+                <div className="calendar-stat-bar-fill bar-mastered" style={{ width: `${totalLive > 0 ? (stageBuckets.mastered / totalLive) * 100 : 0}%` }} />
+              </div>
+              <span className="calendar-stat-bar-value">{stageBuckets.mastered}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="calendar-stats-col">
+        <div className="calendar-stats-col-head">
+          <span className="calendar-stats-col-title">最近一次</span>
+          <span className="calendar-stats-col-meta">
+            {lastSession ? formatShortDate(lastSession.endedAt) : '—'}
+          </span>
+        </div>
+        <div className="calendar-stats-scroll">
+          {lastSession ? (
+            <>
+              <div className="calendar-stats-grid">
+                <div className="calendar-stat">
+                  <div className="calendar-stat-num">{lastSession.answeredCount}</div>
+                  <div className="calendar-stat-label">已答 / {lastSession.totalCount}</div>
+                </div>
+                <div className="calendar-stat">
+                  <div className="calendar-stat-num">{Math.round(lastSession.elapsedSec / 60)}</div>
+                  <div className="calendar-stat-label">分钟</div>
+                </div>
+                <div className="calendar-stat">
+                  <div className="calendar-stat-num">
+                    {lastSession.answeredCount > 0
+                      ? Math.round(lastSession.elapsedSec / lastSession.answeredCount)
+                      : 0}
+                  </div>
+                  <div className="calendar-stat-label">秒 / 题</div>
+                </div>
+              </div>
+              <div className="calendar-stats-bars">
+                <div className="calendar-stat-bar">
+                  <span className="calendar-stat-bar-label">很熟</span>
+                  <div className="calendar-stat-bar-track">
+                    <div className="calendar-stat-bar-fill bar-mastered" style={{ width: `${lastSession.totalCount > 0 ? (lastSession.mastered / lastSession.totalCount) * 100 : 0}%` }} />
+                  </div>
+                  <span className="calendar-stat-bar-value">{lastSession.mastered}</span>
+                </div>
+                <div className="calendar-stat-bar">
+                  <span className="calendar-stat-bar-label">记得</span>
+                  <div className="calendar-stat-bar-track">
+                    <div className="calendar-stat-bar-fill bar-familiar" style={{ width: `${lastSession.totalCount > 0 ? (lastSession.remembered / lastSession.totalCount) * 100 : 0}%` }} />
+                  </div>
+                  <span className="calendar-stat-bar-value">{lastSession.remembered}</span>
+                </div>
+                <div className="calendar-stat-bar">
+                  <span className="calendar-stat-bar-label">有点难</span>
+                  <div className="calendar-stat-bar-track">
+                    <div className="calendar-stat-bar-fill bar-learning" style={{ width: `${lastSession.totalCount > 0 ? (lastSession.struggled / lastSession.totalCount) * 100 : 0}%` }} />
+                  </div>
+                  <span className="calendar-stat-bar-value">{lastSession.struggled}</span>
+                </div>
+                <div className="calendar-stat-bar">
+                  <span className="calendar-stat-bar-label">不会</span>
+                  <div className="calendar-stat-bar-track">
+                    <div className="calendar-stat-bar-fill bar-fresh" style={{ width: `${lastSession.totalCount > 0 ? (lastSession.forgot / lastSession.totalCount) * 100 : 0}%` }} />
+                  </div>
+                  <span className="calendar-stat-bar-value">{lastSession.forgot}</span>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="calendar-stats-empty">还没有完成的复习会话</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ===== CalendarView =====
 function CalendarView({
-  mistakes, imagesByMistake, taxonomyMap, selectedDate, onSelectDate
+  mistakes, allMistakes, lastSession, imagesByMistake, taxonomyMap, selectedDate, onSelectDate
 }: {
-  mistakes: MistakeItem[]; imagesByMistake: Map<string, ImageAsset[]>;
-  taxonomyMap: Map<string, string>; selectedDate: string; onSelectDate: (date: string) => void;
+  mistakes: MistakeItem[];
+  allMistakes: MistakeItem[];
+  lastSession: LastSessionSummary | null;
+  imagesByMistake: Map<string, ImageAsset[]>;
+  taxonomyMap: Map<string, string>;
+  selectedDate: string;
+  onSelectDate: (date: string) => void;
 }) {
   const weekLabels = ['一', '二', '三', '四', '五', '六', '日'];
   const todayKey = toDateKey(new Date());
@@ -2158,7 +2780,10 @@ function CalendarView({
 
   return (
     <section className="stack">
-      <SectionHeading title="复习日历" meta={`未来35天 ${upcomingCount} 道`} />
+      <SectionHeading title="复习概览" meta={`未来35天 ${upcomingCount} 道`} />
+
+      <CalendarStats allMistakes={allMistakes} lastSession={lastSession} />
+
       <div className="calendar-panel">
         <div className="calendar-head">
           <div>
@@ -2401,7 +3026,7 @@ function MistakeCard({
   footer?: JSX.Element;
   onArchive?: (mistake: MistakeItem) => Promise<void>;
   onEdit?: (mistake: MistakeItem) => void;
-  onRequestDelete?: (rect: DOMRect) => void;
+  onRequestDelete?: (rect: AnchorRect) => void;
   archiveLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -2435,8 +3060,9 @@ function MistakeCard({
           {onRequestDelete && (
             <button ref={deleteBtnRef} type="button" className="icon-button icon-delete"
               onClick={() => {
-                const rect = deleteBtnRef.current?.getBoundingClientRect() ?? null;
-                if (rect) onRequestDelete(rect);
+                if (deleteBtnRef.current) {
+                  onRequestDelete(toAnchorRect(deleteBtnRef.current.getBoundingClientRect()));
+                }
               }} aria-label="删除">
               <Trash2 size={17} />
             </button>
