@@ -296,7 +296,6 @@ function AnchorDialog({
     const margin = 12;
     const maxAvailable = vw - 32;
 
-    // 默认 360；如果锚点是有意义的宽按钮（≥ 240），跟按钮宽度走（上限 400）
     let dialogWidth = Math.min(360, maxAvailable);
     if (anchorRect && anchorRect.width >= 240) {
       dialogWidth = Math.min(Math.max(240, anchorRect.width), Math.min(400, maxAvailable));
@@ -470,14 +469,21 @@ function ImageLightbox({ image, onClose }: { image: { src: string; title: string
     });
   };
 
+  // 关键修复：用 ref 存 onClose，避免父组件每秒重渲染（计时器 tick）时
+  // 产生新的 onClose 引用，导致 effect 依赖变化、缩放被重置成 100%。
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+
   useEffect(() => {
     if (!image) return;
     setScale(1); setOffset({ x: 0, y: 0 });
     pinchRef.current = null; panRef.current = null;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCloseRef.current(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [image, onClose]);
+    // 依赖只留 image：只有切换到不同的图才重置缩放。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [image]);
 
   if (!image) return null;
 
@@ -488,7 +494,7 @@ function ImageLightbox({ image, onClose }: { image: { src: string; title: string
           <button type="button" onClick={() => updateScale((v) => v - 0.25)}>缩小</button>
           <span>{Math.round(scale * 100)}%</span>
           <button type="button" onClick={() => updateScale((v) => v + 0.25)}>放大</button>
-          <button type="button" className="lightbox-close" onClick={onClose}>关闭</button>
+          <button type="button" className="lightbox-close" onClick={() => onCloseRef.current()}>关闭</button>
         </div>
         <div className="lightbox-stage"
           onWheel={(e) => { e.preventDefault(); updateScale((v) => v + (e.deltaY < 0 ? 0.15 : -0.15)); }}
