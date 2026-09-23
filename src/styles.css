@@ -851,6 +851,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
+  transition: background 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
 }
 .review-result-forgot {
   color: var(--danger);
@@ -871,6 +872,31 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
   color: var(--primary);
   border-color: rgba(var(--primary-rgb), 0.42);
   background: rgba(var(--primary-rgb), 0.08);
+}
+
+/* 已选择的结果 —— 高亮显示，让用户知道上次选了什么 */
+.review-result-btn.chosen {
+  font-weight: 700;
+}
+.review-result-forgot.chosen {
+  background: rgba(var(--danger-rgb), 0.24);
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px rgba(var(--danger-rgb), 0.12);
+}
+.review-result-struggled.chosen {
+  background: rgba(var(--warning-rgb), 0.24);
+  border-color: var(--warning);
+  box-shadow: 0 0 0 3px rgba(var(--warning-rgb), 0.12);
+}
+.review-result-remembered.chosen {
+  background: rgba(var(--success-rgb), 0.24);
+  border-color: var(--success);
+  box-shadow: 0 0 0 3px rgba(var(--success-rgb), 0.12);
+}
+.review-result-mastered.chosen {
+  background: rgba(var(--primary-rgb), 0.24);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.12);
 }
 
 .review-right {
