@@ -428,8 +428,15 @@ function ReviewFullscreen({
   const [index, setIndex] = useState(initialProgress?.currentIndex ?? 0);
   const [page, setPage] = useState(initialProgress?.currentPage ?? 0);
   const [direction, setDirection] = useState(0);
-  const [showAnswer, setShowAnswer] = useState(false);
   const [answeredResults, setAnsweredResults] = useState<Record<string, ReviewResult>>(initialProgress?.answeredResults ?? {});
+  // 已经揭示过答案的题目 id 集合。答过、或者主动看过答案都会加进来。
+  // 恢复进度时，答过的题自动视为"已揭示"。
+  const [revealedIds, setRevealedIds] = useState<Set<string>>(() => {
+    const s = new Set<string>();
+    const init = initialProgress?.answeredResults;
+    if (init) Object.keys(init).forEach(id => s.add(id));
+    return s;
+  });
   const [exitOpen, setExitOpen] = useState(false);
   const [exitAnchor, setExitAnchor] = useState<DOMRect | null>(null);
   const [preview, setPreview] = useState<{ src: string; title: string } | null>(null);
@@ -444,6 +451,9 @@ function ReviewFullscreen({
   const questionImages = currentImages.filter(img => (img.role ?? 'question') === 'question');
   const answerImages = currentImages.filter(img => img.role === 'answer');
   const imageKey = currentImages.map(i => i.id).join(',');
+
+  const showAnswer = current ? revealedIds.has(current.id) : false;
+  const currentAnswer = current ? answeredResults[current.id] : undefined;
 
   useEffect(() => {
     const qs = questionImages.map(img => URL.createObjectURL(img.imageBlob));
@@ -476,14 +486,33 @@ function ReviewFullscreen({
     if (nextIndex < 0 || nextIndex >= total) return;
     setDirection(nextIndex > safeIndex ? 1 : -1);
     setIndex(nextIndex);
-    setShowAnswer(false);
+  };
+
+  const revealAnswer = () => {
+    if (!current) return;
+    setRevealedIds(prev => {
+      if (prev.has(current.id)) return prev;
+      const next = new Set(prev);
+      next.add(current.id);
+      return next;
+    });
   };
 
   const handleAnswered = async (result: ReviewResult) => {
-    await onAnswered(kind, current, result);
+    if (!current) return;
+    const isFirstAnswer = !answeredResults[current.id];
+    // 只有第一次作答才写库；改选只更新本地状态，避免复习进度被重复推进
+    if (isFirstAnswer) {
+      await onAnswered(kind, current, result);
+    }
     const nextAnswered = { ...answeredResults, [current.id]: result };
     setAnsweredResults(nextAnswered);
-    setShowAnswer(false);
+    setRevealedIds(prev => {
+      if (prev.has(current.id)) return prev;
+      const next = new Set(prev);
+      next.add(current.id);
+      return next;
+    });
     const allAnswered = mistakes.every(m => nextAnswered[m.id]);
     if (allAnswered) {
       onClearSession(kind);
@@ -491,7 +520,10 @@ function ReviewFullscreen({
       window.setTimeout(() => onExit(), 350);
       return;
     }
-    if (safeIndex + 1 < total) window.setTimeout(() => goTo(safeIndex + 1), 220);
+    // 只有第一次作答时才自动跳下一题；改选不跳
+    if (isFirstAnswer && safeIndex + 1 < total) {
+      window.setTimeout(() => goTo(safeIndex + 1), 220);
+    }
   };
 
   const handleExitClick = () => {
@@ -581,18 +613,21 @@ function ReviewFullscreen({
 
         <div className="review-action-row">
           {!showAnswer ? (
-            <button type="button" className="review-show-answer-btn" onClick={() => setShowAnswer(true)}>
+            <button type="button" className="review-show-answer-btn" onClick={revealAnswer}>
               📖 显示答案
             </button>
           ) : (
             <div className="review-result-row">
-              {(['forgot', 'struggled', 'remembered', 'mastered'] as ReviewResult[]).map((r) => (
-                <button key={r} type="button"
-                  className={`review-result-btn review-result-${r}`}
-                  onClick={() => handleAnswered(r)}>
-                  {reviewResultLabel[r]}
-                </button>
-              ))}
+              {(['forgot', 'struggled', 'remembered', 'mastered'] as ReviewResult[]).map((r) => {
+                const isChosen = currentAnswer === r;
+                return (
+                  <button key={r} type="button"
+                    className={`review-result-btn review-result-${r}${isChosen ? ' chosen' : ''}`}
+                    onClick={() => handleAnswered(r)}>
+                    {reviewResultLabel[r]}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
@@ -834,7 +869,6 @@ function App() {
   const draftImagesLoadedRef = useRef(false);
   const galleryScrollRef = useRef<number>(0);
 
-  // 应用主题 + 同步状态栏颜色
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     try { window.localStorage.setItem(THEME_KEY, theme); } catch {}
