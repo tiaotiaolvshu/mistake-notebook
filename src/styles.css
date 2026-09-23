@@ -878,9 +878,20 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
 }
 .form-error { color: var(--danger); font-size: 13px; margin: 0; }
 
+/* ===== 编辑页：桌面端垂直居中，手机端顶部对齐 ===== */
 .edit-shell-wrapper {
-  display: flex; align-items: flex-start; justify-content: center;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
   padding-top: 12px;
+  min-height: calc(100vh - 140px);
+}
+@media (min-width: 768px) {
+  .edit-shell-wrapper {
+    align-items: center;
+    padding-top: 0;
+    padding-bottom: 40px;
+  }
 }
 .edit-shell {
   display: flex; flex-direction: column; gap: 14px; padding: 18px;
