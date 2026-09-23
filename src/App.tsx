@@ -137,16 +137,27 @@ const loadSession = (kind: ReviewSessionKind): ReviewSessionProgress | null => {
     const raw = window.localStorage.getItem(key);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as ReviewSessionProgress;
-    if (!parsed || !Array.isArray(parsed.mistakeIds)) return null;
+    if (!parsed || !Array.isArray(parsed.mistakeIds) || parsed.mistakeIds.length === 0) return null;
     return parsed;
   } catch { return null; }
 };
 
 const saveSession = (session: ReviewSessionProgress) => {
   try {
+    if (!session.mistakeIds || session.mistakeIds.length === 0) {
+      console.warn('[错题本] 拒绝保存空会话（mistakeIds 为空）');
+      return;
+    }
     const key = session.kind === 'normal' ? NORMAL_SESSION_KEY : EXAM_SESSION_KEY;
-    window.localStorage.setItem(key, JSON.stringify(session));
-  } catch (err) { console.error('保存复习会话失败', err); }
+    const payload = JSON.stringify(session);
+    window.localStorage.setItem(key, payload);
+    const readback = window.localStorage.getItem(key);
+    if (readback !== payload) {
+      console.error('[错题本] 会话保存后回读不一致', {
+        key, expectedLength: payload.length, actualLength: readback?.length ?? 0
+      });
+    }
+  } catch (err) { console.error('[错题本] 保存复习会话失败', err); }
 };
 
 const clearSession = (kind: ReviewSessionKind) => {
@@ -411,10 +422,11 @@ function ImageLightbox({ image, onClose }: { image: { src: string; title: string
 
 // ===== 沉浸式复习 =====
 function ReviewFullscreen({
-  kind, subjectName, mistakes, imagesByMistake, initialProgress, onAnswered, onSaveProgress, onExit, onClearSession, onToast
+  kind, subjectName, sessionMistakeIds, mistakes, imagesByMistake, initialProgress, onAnswered, onSaveProgress, onExit, onClearSession, onToast
 }: {
   kind: ReviewSessionKind;
   subjectName?: string;
+  sessionMistakeIds: string[];
   mistakes: MistakeItem[];
   imagesByMistake: Map<string, ImageAsset[]>;
   initialProgress: ReviewSessionProgress | null;
@@ -429,8 +441,6 @@ function ReviewFullscreen({
   const [page, setPage] = useState(initialProgress?.currentPage ?? 0);
   const [direction, setDirection] = useState(0);
   const [answeredResults, setAnsweredResults] = useState<Record<string, ReviewResult>>(initialProgress?.answeredResults ?? {});
-  // 已经揭示过答案的题目 id 集合。答过、或者主动看过答案都会加进来。
-  // 恢复进度时，答过的题自动视为"已揭示"。
   const [revealedIds, setRevealedIds] = useState<Set<string>>(() => {
     const s = new Set<string>();
     const init = initialProgress?.answeredResults;
@@ -501,7 +511,6 @@ function ReviewFullscreen({
   const handleAnswered = async (result: ReviewResult) => {
     if (!current) return;
     const isFirstAnswer = !answeredResults[current.id];
-    // 只有第一次作答才写库；改选只更新本地状态，避免复习进度被重复推进
     if (isFirstAnswer) {
       await onAnswered(kind, current, result);
     }
@@ -520,7 +529,6 @@ function ReviewFullscreen({
       window.setTimeout(() => onExit(), 350);
       return;
     }
-    // 只有第一次作答时才自动跳下一题；改选不跳
     if (isFirstAnswer && safeIndex + 1 < total) {
       window.setTimeout(() => goTo(safeIndex + 1), 220);
     }
@@ -532,10 +540,21 @@ function ReviewFullscreen({
   };
 
   const handleSaveAndExit = () => {
+    // 关键修复：保存时用会话原始的 mistakeIds，而不是当前渲染列表反推。
+    // 之前用 mistakes.map(m => m.id)，如果某些题没加载出来会被静默丢掉。
+    const finalMistakeIds = sessionMistakeIds.length > 0
+      ? sessionMistakeIds
+      : mistakes.map(m => m.id);
     onSaveProgress({
-      kind, subjectId: initialProgress?.subjectId, subjectName, orderBy: initialProgress?.orderBy,
-      mistakeIds: mistakes.map(m => m.id), currentIndex: safeIndex, currentPage: page,
-      answeredResults, startedAt: initialProgress?.startedAt ?? new Date().toISOString(),
+      kind,
+      subjectId: initialProgress?.subjectId,
+      subjectName,
+      orderBy: initialProgress?.orderBy,
+      mistakeIds: finalMistakeIds,
+      currentIndex: safeIndex,
+      currentPage: page,
+      answeredResults,
+      startedAt: initialProgress?.startedAt ?? new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
     setExitOpen(false);
@@ -722,11 +741,12 @@ function ModeDialog({
   );
 }
 
-// ===== 备考设置弹窗 =====
+// ===== 备考设置弹窗（改为锚定） =====
 function ExamSetupDialog({
-  open, subjects, onCancel, onStart
+  open, anchorRect, subjects, onCancel, onStart
 }: {
-  open: boolean; subjects: { id: string; name: string }[]; onCancel: () => void;
+  open: boolean; anchorRect: DOMRect | null;
+  subjects: { id: string; name: string }[]; onCancel: () => void;
   onStart: (subjectId: string, subjectName: string, orderBy: ExamOrderBy, includeArchived: boolean) => void;
 }) {
   const [subjectId, setSubjectId] = useState('');
@@ -773,7 +793,7 @@ function ExamSetupDialog({
   );
 
   return (
-    <CenterDialog open={open} onCancel={onCancel}>
+    <AnchorDialog open={open} anchorRect={anchorRect} onCancel={onCancel}>
       <div className="exam-setup-dialog">
         <h2 className="mode-dialog-title">备考模式</h2>
         <div className="exam-setup-section">
@@ -816,16 +836,19 @@ function ExamSetupDialog({
           <button type="button" className="exam-start-btn" disabled={!subjectId} onClick={handleStart}>开始</button>
         </div>
       </div>
-    </CenterDialog>
+    </AnchorDialog>
   );
 }
 
-// ===== 继续/重开弹窗 =====
+// ===== 继续/重开弹窗（改为锚定） =====
 function ResumeDialog({
-  open, kind, onCancel, onResume, onRestart
-}: { open: boolean; kind: ReviewSessionKind; onCancel: () => void; onResume: () => void; onRestart: () => void; }) {
+  open, anchorRect, kind, onCancel, onResume, onRestart
+}: {
+  open: boolean; anchorRect: DOMRect | null; kind: ReviewSessionKind;
+  onCancel: () => void; onResume: () => void; onRestart: () => void;
+}) {
   return (
-    <CenterDialog open={open} onCancel={onCancel}>
+    <AnchorDialog open={open} anchorRect={anchorRect} onCancel={onCancel}>
       <div className="resume-dialog">
         <h2 className="mode-dialog-title">发现未完成的进度</h2>
         <p className="resume-dialog-desc">
@@ -837,7 +860,7 @@ function ResumeDialog({
         </div>
         <button type="button" className="mode-cancel" onClick={onCancel}>取消</button>
       </div>
-    </CenterDialog>
+    </AnchorDialog>
   );
 }
 
@@ -1087,7 +1110,7 @@ function App() {
     setResumeKind(null);
     if (!kind) return;
     const session = loadSession(kind);
-    if (!session) return;
+    if (!session) { setToast('进度已失效'); return; }
     if (kind === 'normal') startNormalReview(session);
     else startExamReview(session.subjectId ?? ALL_SUBJECTS_ID, session.subjectName ?? '全部', session.orderBy ?? 'created', false, session);
   };
@@ -1140,6 +1163,7 @@ function App() {
       <ReviewFullscreen
         kind={reviewSession.kind}
         subjectName={reviewSession.subjectName}
+        sessionMistakeIds={reviewSession.mistakeIds}
         mistakes={reviewMistakes}
         imagesByMistake={imagesByMistake}
         initialProgress={reviewSession.progress}
@@ -1284,6 +1308,7 @@ function App() {
         examHasSave={examHasSave}
         normalDueCount={dueMistakes.length} />
       <ExamSetupDialog open={examSetupOpen}
+        anchorRect={modeDialogAnchor}
         subjects={examSubjects}
         onCancel={() => setExamSetupOpen(false)}
         onStart={(subjectId, subjectName, orderBy, includeArchived) => {
@@ -1291,6 +1316,7 @@ function App() {
           startExamReview(subjectId, subjectName, orderBy, includeArchived, null);
         }} />
       <ResumeDialog open={!!resumeKind}
+        anchorRect={modeDialogAnchor}
         kind={resumeKind ?? 'normal'}
         onCancel={() => setResumeKind(null)}
         onResume={handleResume}
