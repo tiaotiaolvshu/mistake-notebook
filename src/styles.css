@@ -3,7 +3,7 @@
    :root 默认 = 墨玉（深色）
    ============================================================ */
 
-/* ===== 墨玉（默认）===== */
+/* ===== 墨玉（默认） ===== */
 :root {
   --bg: #16161a; --bg-rgb: 22, 22, 26;
   --text: #e6e4dd; --text-rgb: 230, 228, 221;
@@ -32,11 +32,7 @@
   --radius-control: 14px;
 }
 
-/* ============================================================
-   中国传统色
-   ============================================================ */
-
-/* 宣纸 */
+/* ===== 中国传统色 ===== */
 [data-theme="xuanzhi"] {
   --bg: #f4efe4; --bg-rgb: 244, 239, 228;
   --text: #1f1c18; --text-rgb: 31, 28, 24;
@@ -63,7 +59,6 @@
   --texture-opacity: 1;
 }
 
-/* 青花 */
 [data-theme="qinghua"] {
   --bg: #eef2f7; --bg-rgb: 238, 242, 247;
   --text: #1a2534; --text-rgb: 26, 37, 52;
@@ -90,7 +85,6 @@
   --texture-opacity: 1;
 }
 
-/* 墨玉显式声明（与 :root 一致） */
 [data-theme="moyu"] {
   --bg: #16161a; --bg-rgb: 22, 22, 26;
   --text: #e6e4dd; --text-rgb: 230, 228, 221;
@@ -117,7 +111,6 @@
   --texture-opacity: 1;
 }
 
-/* 胭脂 */
 [data-theme="yanzhi"] {
   --bg: #f6ece9; --bg-rgb: 246, 236, 233;
   --text: #2a1f1c; --text-rgb: 42, 31, 28;
@@ -143,7 +136,6 @@
   --texture-opacity: 1;
 }
 
-/* 竹青 */
 [data-theme="zhuqing"] {
   --bg: #edf2ec; --bg-rgb: 237, 242, 236;
   --text: #1c241f; --text-rgb: 28, 36, 31;
@@ -170,11 +162,7 @@
   --texture-opacity: 1;
 }
 
-/* ============================================================
-   莫兰迪色 —— 低饱和、灰调、柔雾
-   ============================================================ */
-
-/* 雾蓝 */
+/* ===== 莫兰迪色 ===== */
 [data-theme="wulan"] {
   --bg: #e8ebee; --bg-rgb: 232, 235, 238;
   --text: #22262c; --text-rgb: 34, 38, 44;
@@ -201,7 +189,6 @@
   --texture-opacity: 1;
 }
 
-/* 干玫瑰 */
 [data-theme="ganmeigui"] {
   --bg: #f0e5e5; --bg-rgb: 240, 229, 229;
   --text: #2c2223; --text-rgb: 44, 34, 35;
@@ -228,7 +215,6 @@
   --texture-opacity: 1;
 }
 
-/* 苔绿 */
 [data-theme="tailv"] {
   --bg: #eaede4; --bg-rgb: 234, 237, 228;
   --text: #23271f; --text-rgb: 35, 39, 31;
@@ -256,7 +242,6 @@
   --texture-opacity: 1;
 }
 
-/* 沙褐 */
 [data-theme="shahe"] {
   --bg: #eee6d9; --bg-rgb: 238, 230, 217;
   --text: #2c251a; --text-rgb: 44, 37, 26;
@@ -283,7 +268,6 @@
   --texture-opacity: 1;
 }
 
-/* 藕荷 */
 [data-theme="ouhe"] {
   --bg: #ece6ec; --bg-rgb: 236, 230, 236;
   --text: #272227; --text-rgb: 39, 34, 39;
@@ -310,11 +294,7 @@
   --texture-opacity: 1;
 }
 
-/* ============================================================
-   莫奈色 —— 印象派、光影、柔色
-   ============================================================ */
-
-/* 睡莲 */
+/* ===== 莫奈色 ===== */
 [data-theme="shuilian"] {
   --bg: #e6eef5; --bg-rgb: 230, 238, 245;
   --text: #1e2836; --text-rgb: 30, 40, 54;
@@ -341,7 +321,6 @@
   --texture-opacity: 1;
 }
 
-/* 日出 */
 [data-theme="richu"] {
   --bg: #f8ead8; --bg-rgb: 248, 234, 216;
   --text: #31241a; --text-rgb: 49, 36, 26;
@@ -368,7 +347,6 @@
   --texture-opacity: 1;
 }
 
-/* 草甸 */
 [data-theme="caodian"] {
   --bg: #e8f0e0; --bg-rgb: 232, 240, 224;
   --text: #1f2a20; --text-rgb: 31, 42, 32;
@@ -395,7 +373,6 @@
   --texture-opacity: 1;
 }
 
-/* 鸢尾 */
 [data-theme="yuanwei"] {
   --bg: #ebe8f5; --bg-rgb: 235, 232, 245;
   --text: #241f30; --text-rgb: 36, 31, 48;
@@ -422,7 +399,6 @@
   --texture-opacity: 1;
 }
 
-/* 暮色 —— 莫奈风格的深色 */
 [data-theme="musi"] {
   --bg: #1a1e2e; --bg-rgb: 26, 30, 46;
   --text: #dde1ec; --text-rgb: 221, 225, 236;
@@ -452,7 +428,6 @@
 /* ============================================================
    通用
    ============================================================ */
-
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; outline: none; }
 *:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; opacity: 0.7; }
 
@@ -550,7 +525,6 @@ h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin: 0; colo
 .tab-button svg { width: 20px; height: 20px; }
 .tab-label { line-height: 1.1; }
 
-/* ===== 分段控制器 ===== */
 .segmented-wrap {
   position: relative; display: grid; gap: 5px;
   background: rgba(var(--glass-rgb), 0.35);
@@ -1189,7 +1163,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
   background: rgba(var(--glass-rgb), 0.4); color: var(--text); cursor: pointer;
 }
 
-/* ===== 弹窗（宽度由 inline style 控制） ===== */
+/* ===== 弹窗 ===== */
 .dialog-blur-backdrop {
   position: fixed; inset: 0; z-index: 1200;
   background: rgba(0, 0, 0, 0.32);
@@ -1557,7 +1531,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
 .storage-copy { display: grid; gap: 6px; }
 .storage-copy p { margin: 0; color: var(--muted); font-size: 14px; }
 
-/* ===== 主题选择器：3 行 × 5 个 ===== */
+/* ===== 主题选择器：3 行 × 5 ===== */
 .theme-chips {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
@@ -1599,7 +1573,6 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
 }
 .theme-chip-name { position: relative; z-index: 1; line-height: 1.2; white-space: nowrap; }
 
-/* 15 个主题的色板小圆点 */
 .theme-dot[data-theme-dot="xuanzhi"] .theme-dot-bg { background: #f4efe4; }
 .theme-dot[data-theme-dot="xuanzhi"] .theme-dot-accent { background: #8b5a3c; }
 .theme-dot[data-theme-dot="qinghua"] .theme-dot-bg { background: #eef2f7; }
@@ -1610,7 +1583,6 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
 .theme-dot[data-theme-dot="yanzhi"] .theme-dot-accent { background: #a8435c; }
 .theme-dot[data-theme-dot="zhuqing"] .theme-dot-bg { background: #edf2ec; }
 .theme-dot[data-theme-dot="zhuqing"] .theme-dot-accent { background: #4a6b52; }
-
 .theme-dot[data-theme-dot="wulan"] .theme-dot-bg { background: #e8ebee; }
 .theme-dot[data-theme-dot="wulan"] .theme-dot-accent { background: #6b7a8a; }
 .theme-dot[data-theme-dot="ganmeigui"] .theme-dot-bg { background: #f0e5e5; }
@@ -1621,7 +1593,6 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
 .theme-dot[data-theme-dot="shahe"] .theme-dot-accent { background: #8a7a62; }
 .theme-dot[data-theme-dot="ouhe"] .theme-dot-bg { background: #ece6ec; }
 .theme-dot[data-theme-dot="ouhe"] .theme-dot-accent { background: #887a94; }
-
 .theme-dot[data-theme-dot="shuilian"] .theme-dot-bg { background: #e6eef5; }
 .theme-dot[data-theme-dot="shuilian"] .theme-dot-accent { background: #5a7898; }
 .theme-dot[data-theme-dot="richu"] .theme-dot-bg { background: #f8ead8; }
@@ -1660,11 +1631,26 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
   position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
   display: flex; gap: 10px; z-index: 2;
 }
-.lightbox-toolbar button, .lightbox-toolbar span {
-  border: 0; border-radius: 40px; background: rgba(255, 255, 255, 0.25);
-  backdrop-filter: blur(8px); color: white; padding: 6px 16px;
-  font-weight: 600; font-size: 13px; cursor: pointer;
+.lightbox-toolbar button,
+.lightbox-toolbar span {
+  border: 1px solid rgba(var(--primary-rgb), 0.55);
+  border-radius: 40px;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(10px) saturate(1.3);
+  -webkit-backdrop-filter: blur(10px) saturate(1.3);
+  color: #fff;
+  padding: 6px 16px;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  transition: border-color 0.2s ease, background 0.2s ease;
 }
+.lightbox-toolbar button:hover {
+  border-color: rgba(var(--primary-rgb), 0.9);
+  background: rgba(0, 0, 0, 0.7);
+}
+.lightbox-toolbar span { cursor: default; }
 .lightbox-stage {
   display: grid; place-items: center; width: 100%; height: 100%;
   overflow: hidden; touch-action: none;
@@ -1684,65 +1670,28 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
 /* ============================================================
    竖屏 / 手机适配（< 720px）
    ============================================================ */
-
 @media (max-width: 720px) {
-  /* 表单从两列变一列，每个 SegmentedControl 独占一行 */
-  .form-grid-pair {
-    grid-template-columns: 1fr;
-  }
-
-  /* 导入页：图片区与表单区上下堆叠 */
-  .import-page-inner {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-
-  /* 字段更宽松，字不挤 */
+  .form-grid-pair { grid-template-columns: 1fr; }
+  .import-page-inner { grid-template-columns: 1fr; gap: 12px; }
   .form-grid { gap: 12px; }
   .field > span { font-size: 13px; }
-
-  /* 分段控制器按钮变高一点，手指好点 */
-  .segmented-option {
-    min-height: 40px;
-    padding: 8px 6px;
-    font-size: 13px;
-  }
-
-  /* 导入顶部的题目 tab 更好点 */
-  .import-carousel-tab {
-    padding: 6px 14px;
-    font-size: 13px;
-  }
-
-  /* 底部按钮撑满行 */
+  .segmented-option { min-height: 40px; padding: 8px 6px; font-size: 13px; }
+  .import-carousel-tab { padding: 6px 14px; font-size: 13px; }
   .import-carousel-footer {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
+    flex-direction: column; align-items: stretch; gap: 10px;
   }
-  .import-carousel-footer-left {
-    justify-content: center;
-  }
+  .import-carousel-footer-left { justify-content: center; }
   .import-carousel-footer > div:last-child {
-    display: flex !important;
-    gap: 8px !important;
-    width: 100%;
+    display: flex !important; gap: 8px !important; width: 100%;
   }
-  .import-add-btn,
-  .import-save-all-btn {
-    flex: 1;
-    justify-content: center;
-  }
-
-  /* 主题选择器窄屏下 5 列可能太挤 —— 保持 5 列但缩小圆点 */
+  .import-add-btn, .import-save-all-btn { flex: 1; justify-content: center; }
   .theme-dot { width: 18px; height: 18px; }
   .theme-chip-name { font-size: 10px; }
 }
 
 /* ============================================================
-   复习界面竖屏适配
+   复习界面竖屏
    ============================================================ */
-
 @media (max-width: 640px) {
   .review-shell {
     grid-template-columns: 1fr;
@@ -1750,42 +1699,21 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
     padding: 12px 12px calc(12px + env(safe-area-inset-bottom));
     gap: 10px;
   }
-
-  .review-left {
-    padding: 12px;
-    gap: 10px;
-    border-radius: 18px;
-  }
-
+  .review-left { padding: 12px; gap: 10px; border-radius: 18px; }
   .review-right {
-    padding: 12px;
-    gap: 8px;
-    border-radius: 18px;
-    max-height: 42vh;
+    padding: 12px; gap: 8px; border-radius: 18px;
+    max-height: 55vh;
     overflow-y: auto;
   }
-
-  /* 题号网格：竖屏下用 5 列，一行放 5 个，容易点 */
-  .review-page-numbers-wrap {
-    flex: 0 0 auto;
-    min-height: 0;
-  }
+  .review-page-numbers-wrap { flex: 0 0 auto; min-height: 0; }
   .review-page-numbers {
     grid-template-columns: repeat(5, 1fr);
-    gap: 6px;
-    padding: 6px;
+    gap: 6px; padding: 6px;
   }
-  .review-page-num {
-    min-height: 44px;
-    font-size: 14px;
-  }
+  .review-page-num { min-height: 44px; font-size: 14px; }
   .review-num-label { font-size: 14px; }
-
-  /* 计时器字号缩一点 */
   .session-timer { padding: 10px 12px; }
   .session-timer-value { font-size: 22px; }
-
-  /* 答题按钮加高一点，指头好点 */
   .review-result-btn { font-size: 13px; min-height: 48px; }
   .review-show-answer-btn { min-height: 48px; }
   .review-exit-btn { min-height: 44px; }
@@ -1794,7 +1722,6 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
 /* ============================================================
    平板 / 桌面
    ============================================================ */
-
 @media (min-width: 768px) {
   .app-shell { padding-left: 100px; padding-right: 24px; max-width: 1100px; }
   .tabbar {
